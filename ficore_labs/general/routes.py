@@ -367,3 +367,23 @@ def language_demo():
             title=trans('general_language_demo', lang=lang, default='Language Demo')
         ), 404
 
+@general_bp.route('/language-test')
+def language_test():
+    """Debug page for testing language switching functionality."""
+    lang = session.get('lang', 'en')
+    try:
+        return render_template(
+            'general/language_test.html',
+            title='Language Switch Test'
+        )
+    except TemplateNotFound as e:
+        current_app.logger.error(
+            f"Template not found: {str(e)}",
+            extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': current_user.id if current_user.is_authenticated else 'anonymous'}
+        )
+        return render_template(
+            'error/404.html',
+            error=str(e),
+            title='Language Switch Test'
+        ), 404
+
