@@ -561,14 +561,37 @@ def create_app():
             return redirect(url_for('index'))
 
     @app.route('/set_language/<lang>', methods=['GET'])
-    @ensure_session_id
     def set_language(lang):
-        valid_langs = ['en', 'ha']
-        session['lang'] = lang if lang in valid_langs else 'en'
-        session['last_activity'] = datetime.now(timezone.utc).isoformat()
-        session.modified = True
-        logger.info(f"Language set to {session['lang']} for session {session.get('sid', 'no-session-id')}", extra={'session_id': session.get('sid', 'no-session-id'), 'ip_address': request.remote_addr})
-        return redirect(request.referrer or url_for('index'))
+        try:
+            valid_langs = ['en', 'ha']
+            old_lang = session.get('lang', 'en')
+            session['lang'] = lang if lang in valid_langs else 'en'
+            session['last_activity'] = datetime.now(timezone.utc).isoformat()
+            session.modified = True
+            
+            logger.info(f"Language changed from {old_lang} to {session['lang']} for session {session.get('sid', 'no-session-id')}", 
+                       extra={'session_id': session.get('sid', 'no-session-id'), 'ip_address': request.remote_addr})
+            
+            # For AJAX requests, return JSON response
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': True,
+                    'language': session['lang'],
+                    'message': f'Language changed to {session["lang"]}'
+                })
+            
+            # For regular requests, redirect
+            return redirect(request.referrer or url_for('index'))
+            
+        except Exception as e:
+            logger.error(f'Error setting language: {str(e)}', 
+                        extra={'session_id': session.get('sid', 'no-session-id'), 'ip_address': request.remote_addr})
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'error': 'Failed to set language'}), 500
+            
+            flash('Failed to change language', 'error')
+            return redirect(request.referrer or url_for('index'))
 
     @app.errorhandler(404)
     def page_not_found(e):
