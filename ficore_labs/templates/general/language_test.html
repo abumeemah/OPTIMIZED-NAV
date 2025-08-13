@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% block title %}Language Switch Test{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Language Switch Debug Test</h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Current Language:</strong> <span id="currentLang">{{ current_lang }}</span><br>
+                        <strong>Session ID:</strong> <span id="sessionId">{{ session.get('sid', 'none') }}</span><br>
+                        <strong>User Authenticated:</strong> <span id="userAuth">{{ current_user.is_authenticated }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <h4>Test Buttons</h4>
+                        <button class="btn btn-primary me-2" onclick="testOriginalToggle()">Test Original Toggle</button>
+                        <button class="btn btn-success me-2" onclick="testDirectAPI()">Test Direct API</button>
+                        <button class="btn btn-info me-2" onclick="testSessionDebug()">Check Session</button>
+                        <button class="btn btn-warning me-2" onclick="testInstantToggle()">Test Instant Toggle</button>
+                    </div>
+
+                    <div class="mb-3">
+                        <h4>Debug Output</h4>
+                        <pre id="debugOutput" style="background: #f8f9fa; padding: 1rem; border-radius: 4px; max-height: 400px; overflow-y: auto;"></pre>
+                    </div>
+
+                    <div class="mb-3">
+                        <h4>Sample Translatable Content</h4>
+                        <p data-translate="general_welcome">{{ t('general_welcome', default='Welcome') }}</p>
+                        <p data-translate="general_language_demo_description">{{ t('general_language_demo_description', default='Click the language toggle button to instantly switch between English and Hausa without page reload!') }}</p>
+                        <button class="btn btn-secondary" data-translate="general_save">{{ t('general_save', default='Save') }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let debugOutput = document.getElementById('debugOutput');
+
+function log(message) {
+    const timestamp = new Date().toLocaleTimeString();
+    debugOutput.textContent += `[${timestamp}] ${message}\n`;
+    debugOutput.scrollTop = debugOutput.scrollHeight;
+    console.log(message);
+}
+
+function clearLog() {
+    debugOutput.textContent = '';
+}
+
+async function testOriginalToggle() {
+    log('=== Testing Original Toggle Method ===');
+    clearLog();
+    
+    try {
+        const languageTexts = document.querySelectorAll('#languageText, #navLanguageText');
+        if (!languageTexts.length) {
+            log('ERROR: No language text elements found');
+            return;
+        }
+        
+        const currentLang = languageTexts[0].textContent.toLowerCase() === 'english' ? 'en' : 'ha';
+        const newLang = currentLang === 'en' ? 'ha' : 'en';
+        
+        log(`Current language: ${currentLang}, switching to: ${newLang}`);
+        
+        const response = await fetch(`/set_language/${newLang}`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        });
+        
+        log(`Response status: ${response.status}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            log(`Response data: ${JSON.stringify(data)}`);
+            
+            if (data.success) {
+                log('SUCCESS: Language changed successfully');
+                // Update UI
+                languageTexts.forEach(text => {
+                    text.textContent = newLang === 'en' ? 'ENGLISH' : 'HAUSA';
+                });
+                document.getElementById('currentLang').textContent = newLang;
+            } else {
+                log(`ERROR: ${data.error}`);
+            }
+        } else {
+            const errorText = await response.text();
+            log(`ERROR: Request failed - ${errorText}`);
+        }
+    } catch (error) {
+        log(`ERROR: ${error.message}`);
+    }
+}
+
+async function testDirectAPI() {
+    log('=== Testing Direct API Method ===');
+    clearLog();
+    
+    try {
+        const currentLang = document.getElementById('currentLang').textContent;
+        const newLang = currentLang === 'en' ? 'ha' : 'en';
+        
+        log(`Using API to switch from ${currentLang} to ${newLang}`);
+        
+        const response = await fetch(`/api/language/set/${newLang}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            credentials: 'same-origin'
+        });
+        
+        log(`API Response status: ${response.status}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            log(`API Response: ${JSON.stringify(data)}`);
+            
+            if (data.success) {
+                log('SUCCESS: API language change successful');
+                document.getElementById('currentLang').textContent = data.language;
+            }
+        } else {
+            const errorText = await response.text();
+            log(`API ERROR: ${errorText}`);
+        }
+    } catch (error) {
+        log(`API ERROR: ${error.message}`);
+    }
+}
+
+async function testSessionDebug() {
+    log('=== Checking Session Debug Info ===');
+    clearLog();
+    
+    try {
+        const response = await fetch('/api/debug/session', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            },
+            credentials: 'same-origin'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            log(`Session Info: ${JSON.stringify(data, null, 2)}`);
+        } else {
+            log(`Session debug failed: ${response.status}`);
+        }
+    } catch (error) {
+        log(`Session debug error: ${error.message}`);
+    }
+}
+
+async function testInstantToggle() {
+    log('=== Testing Instant Toggle ===');
+    clearLog();
+    
+    try {
+        if (window.instantLanguageSwitch) {
+            log('Instant language switch available');
+            await window.instantLanguageSwitch.toggleLanguage();
+            log('Instant toggle completed');
+        } else {
+            log('Instant language switch not available');
+            if (window.toggleLanguage) {
+                log('Using fallback toggleLanguage');
+                await window.toggleLanguage();
+            } else {
+                log('No toggle function available');
+            }
+        }
+    } catch (error) {
+        log(`Instant toggle error: ${error.message}`);
+    }
+}
+
+function getCsrfToken() {
+    const token = document.querySelector('meta[name="csrf-token"]');
+    return token ? token.getAttribute('content') : '';
+}
+
+// Log initial state
+document.addEventListener('DOMContentLoaded', function() {
+    log('=== Page Loaded ===');
+    log(`Initial language: ${document.getElementById('currentLang').textContent}`);
+    log(`Session ID: ${document.getElementById('sessionId').textContent}`);
+    log(`User authenticated: ${document.getElementById('userAuth').textContent}`);
+    log(`Instant switch available: ${!!window.instantLanguageSwitch}`);
+    log(`Toggle function available: ${!!window.toggleLanguage}`);
+});
+</script>
+{% endblock %}
