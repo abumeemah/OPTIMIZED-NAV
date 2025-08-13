@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('general_language_demo', default='Language Demo') | e }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="card-title mb-0" data-translate="general_language_demo">
+                        {{ t('general_language_demo', default='Instant Language Switching Demo') | e }}
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info" role="alert">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <span data-translate="general_language_demo_description">
+                            {{ t('general_language_demo_description', default='Click the language toggle button to instantly switch between English and Hausa without page reload!') | e }}
+                        </span>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0" data-translate="general_features">
+                                        {{ t('general_features', default='Features') | e }}
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled">
+                                        <li class="mb-2">
+                                            <i class="bi bi-check-circle text-success me-2"></i>
+                                            <span data-translate="general_instant_switching">
+                                                {{ t('general_instant_switching', default='Instant switching') | e }}
+                                            </span>
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="bi bi-check-circle text-success me-2"></i>
+                                            <span data-translate="general_no_page_reload">
+                                                {{ t('general_no_page_reload', default='No page reload required') | e }}
+                                            </span>
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="bi bi-check-circle text-success me-2"></i>
+                                            <span data-translate="general_cached_translations">
+                                                {{ t('general_cached_translations', default='Cached translations') | e }}
+                                            </span>
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="bi bi-check-circle text-success me-2"></i>
+                                            <span data-translate="general_smooth_animations">
+                                                {{ t('general_smooth_animations', default='Smooth animations') | e }}
+                                            </span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border-info">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0" data-translate="general_sample_content">
+                                        {{ t('general_sample_content', default='Sample Content') | e }}
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <p data-translate="general_welcome_message">
+                                        {{ t('general_welcome_message', default='Welcome to FiCore Africa! We provide financial tools for businesses.') | e }}
+                                    </p>
+                                    <p data-translate="general_mission_statement">
+                                        {{ t('general_mission_statement', default='Our mission is to empower African businesses with smart financial solutions.') | e }}
+                                    </p>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <span class="badge bg-primary" data-translate="general_business">
+                                            {{ t('general_business', default='Business') | e }}
+                                        </span>
+                                        <span class="badge bg-success" data-translate="general_finance">
+                                            {{ t('general_finance', default='Finance') | e }}
+                                        </span>
+                                        <span class="badge bg-info" data-translate="general_technology">
+                                            {{ t('general_technology', default='Technology') | e }}
+                                        </span>
+                                        <span class="badge bg-warning" data-translate="general_africa">
+                                            {{ t('general_africa', default='Africa') | e }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card border-warning">
+                                <div class="card-header bg-warning text-dark">
+                                    <h5 class="mb-0" data-translate="general_common_actions">
+                                        {{ t('general_common_actions', default='Common Actions') | e }}
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <button class="btn btn-primary" data-translate="general_save">
+                                            {{ t('general_save', default='Save') | e }}
+                                        </button>
+                                        <button class="btn btn-secondary" data-translate="general_cancel">
+                                            {{ t('general_cancel', default='Cancel') | e }}
+                                        </button>
+                                        <button class="btn btn-success" data-translate="general_submit">
+                                            {{ t('general_submit', default='Submit') | e }}
+                                        </button>
+                                        <button class="btn btn-info" data-translate="general_edit">
+                                            {{ t('general_edit', default='Edit') | e }}
+                                        </button>
+                                        <button class="btn btn-warning" data-translate="general_update">
+                                            {{ t('general_update', default='Update') | e }}
+                                        </button>
+                                        <button class="btn btn-danger" data-translate="general_delete">
+                                            {{ t('general_delete', default='Delete') | e }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card border-secondary">
+                                <div class="card-header bg-secondary text-white">
+                                    <h5 class="mb-0" data-translate="general_form_example">
+                                        {{ t('general_form_example', default='Form Example') | e }}
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <form>
+                                        <div class="mb-3">
+                                            <label for="demoName" class="form-label" data-translate="general_name">
+                                                {{ t('general_name', default='Name') | e }}
+                                            </label>
+                                            <input type="text" class="form-control" id="demoName" 
+                                                   placeholder="{{ t('general_enter_your_name', default='Enter your name') | e }}"
+                                                   data-translate-placeholder="general_enter_your_name">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="demoEmail" class="form-label" data-translate="general_email">
+                                                {{ t('general_email', default='Email') | e }}
+                                            </label>
+                                            <input type="email" class="form-control" id="demoEmail" 
+                                                   placeholder="{{ t('general_enter_your_email', default='Enter your email') | e }}"
+                                                   data-translate-placeholder="general_enter_your_email">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="demoMessage" class="form-label" data-translate="general_message">
+                                                {{ t('general_message', default='Message') | e }}
+                                            </label>
+                                            <textarea class="form-control" id="demoMessage" rows="3" 
+                                                      placeholder="{{ t('general_enter_your_message', default='Enter your message') | e }}"
+                                                      data-translate-placeholder="general_enter_your_message"></textarea>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <div class="alert alert-success" role="alert">
+                            <i class="bi bi-lightbulb me-2"></i>
+                            <strong data-translate="general_tip">{{ t('general_tip', default='Tip') | e }}:</strong>
+                            <span data-translate="general_language_tip">
+                                {{ t('general_language_tip', default='Try switching languages multiple times to see how fast and smooth it is!') | e }}
+                            </span>
+                        </div>
+                        
+                        <a href="{{ url_for('general_bp.home') | e }}" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-left me-2"></i>
+                            <span data-translate="general_back_to_home">
+                                {{ t('general_back_to_home', default='Back to Home') | e }}
+                            </span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Demo-specific enhancements
+document.addEventListener('DOMContentLoaded', function() {
+    // Add visual feedback when language changes
+    document.addEventListener('languageChanged', function(event) {
+        const newLang = event.detail.language;
+        const langName = newLang === 'en' ? 'English' : 'Hausa';
+        
+        // Show success message
+        showLanguageChangeSuccess(langName);
+        
+        // Add temporary highlight to translated elements
+        highlightTranslatedElements();
+    });
+    
+    function showLanguageChangeSuccess(langName) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification success';
+        toast.innerHTML = `
+            <i class="bi bi-check-circle me-2"></i>
+            Language switched to ${langName}!
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+    
+    function highlightTranslatedElements() {
+        const elements = document.querySelectorAll('[data-translate]');
+        elements.forEach(element => {
+            element.classList.add('language-switch-success');
+            setTimeout(() => {
+                element.classList.remove('language-switch-success');
+            }, 600);
+        });
+    }
+});
+</script>
+{% endblock %}
