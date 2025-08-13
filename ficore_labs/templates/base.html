@@ -544,28 +544,35 @@
             });
         };
 
+        // Placeholder function - will be overridden by instant-language-switch.js
         async function toggleLanguage() {
-            if (window.isAuthenticatedContentBlocked) return;
-            const languageTexts = document.querySelectorAll('#languageText, #navLanguageText');
-            if (!languageTexts.length) {
-                console.error('Language text element not found.');
-                return;
-            }
-            const currentLang = languageTexts[0].textContent.toLowerCase() === 'english' ? 'en' : 'ha';
-            const newLang = currentLang === 'en' ? 'ha' : 'en';
-            const newLangText = newLang === 'en' ? 'ENGLISH' : 'HAUSA';
-            try {
-                const response = await fetch('{{ url_for("set_language", lang="") }}' + newLang, {
-                    method: 'GET',
-                    headers: {
-                        'X-CSRFToken': getCsrfToken()
+            console.log('toggleLanguage called - waiting for instant language switch to initialize...');
+            // Fallback to original behavior if instant switch isn't ready
+            if (!window.instantLanguageSwitch) {
+                console.log('Instant language switch not ready, using fallback...');
+                const languageTexts = document.querySelectorAll('#languageText, #navLanguageText');
+                if (!languageTexts.length) {
+                    console.error('Language text element not found.');
+                    return;
+                }
+                const currentLang = languageTexts[0].textContent.toLowerCase() === 'english' ? 'en' : 'ha';
+                const newLang = currentLang === 'en' ? 'ha' : 'en';
+                
+                try {
+                    const response = await fetch('{{ url_for("set_language", lang="") }}' + newLang, {
+                        method: 'GET',
+                        headers: {
+                            'X-CSRFToken': getCsrfToken()
+                        }
+                    });
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        console.error('Failed to toggle language:', response.status);
                     }
-                });
-                if (!response.ok) throw new Error('Failed to toggle language');
-                languageTexts.forEach(text => text.textContent = newLangText);
-                window.location.reload();
-            } catch (error) {
-                console.error('Failed to toggle language:', error);
+                } catch (error) {
+                    console.error('Failed to toggle language:', error);
+                }
             }
         }
 
