@@ -60,7 +60,7 @@ def custom_login_required(f):
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_user.is_authenticated or session.get('is_anonymous', False):
+        if current_user.is_authenticated:
             return f(*args, **kwargs)
         return redirect(url_for('users.login', next=request.url))
     return decorated_function
@@ -188,14 +188,14 @@ class BudgetForm(FlaskForm):
         return super().validate(extra_validators)
 
 @budget_bp.route('/main', methods=['GET', 'POST'])
-@custom_login_required
+@login_required
 @utils.requires_role(['personal', 'admin'])
 @utils.limiter.limit("10 per minute")
 def main():
     if 'sid' not in session:
-        create_anonymous_session()
-        session['is_anonymous'] = True
-        current_app.logger.debug(f"New anonymous session created with sid: {session['sid']}", extra={'session_id': session['sid']})
+        session['sid'] = str(uuid.uuid4())
+        session['is_anonymous'] = False
+        current_app.logger.debug(f"New session created with sid: {session['sid']}", extra={'session_id': session['sid']})
     session.permanent = True
     session.modified = True
     form = BudgetForm()
@@ -210,7 +210,7 @@ def main():
         log_tool_usage(
             tool_name='budget',
             db=db,
-            user_id=current_user.id if current_user.is_authenticated else None,
+            user_id=current_user.id,
             session_id=session.get('sid', 'unknown'),
             action='main_view'
         )
@@ -221,21 +221,21 @@ def main():
     try:
         activities = utils.get_all_recent_activities(
             db=db,
-            user_id=current_user.id if current_user.is_authenticated else None,
-            session_id=session.get('sid', 'unknown') if not current_user.is_authenticated else None,
+            user_id=current_user.id,
+            session_id=session.get('sid', 'unknown'),
         )
-        current_app.logger.debug(f"Fetched {len(activities)} recent activities for {'user ' + str(current_user.id) if current_user.is_authenticated else 'session ' + session.get('sid', 'unknown')}", extra={'session_id': session.get('sid', 'unknown')})
+        current_app.logger.debug(f"Fetched {len(activities)} recent activities for user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
     except Exception as e:
         current_app.logger.error(f"Failed to fetch recent activities: {str(e)}", extra={'session_id': session.get('sid', 'unknown')})
         flash(trans('budget_activities_load_error', default='Error loading recent activities.'), 'warning')
         activities = []
 
     try:
-        filter_criteria = {} if utils.is_admin() else {'user_id': current_user.id} if current_user.is_authenticated else {'session_id': session['sid']}
+        filter_criteria = {} if utils.is_admin() else {'user_id': current_user.id}
         if request.method == 'POST':
             action = request.form.get('action')
             if action == 'create_budget' and form.validate_on_submit():
-                if current_user.is_authenticated and not utils.is_admin():
+                if not utils.is_admin():
                     if not utils.check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
                         current_app.logger.warning(f"Insufficient Ficore Credits for creating budget by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                         flash(trans('budget_insufficient_credits', default='Insufficient Ficore Credits to create a budget. Please purchase more credits.'), 'danger')
@@ -244,7 +244,7 @@ def main():
                     log_tool_usage(
                         tool_name='budget',
                         db=db,
-                        user_id=current_user.id if current_user.is_authenticated else None,
+                        user_id=current_user.id,
                         session_id=session.get('sid', 'unknown'),
                         action='create_budget'
                     )
@@ -266,9 +266,8 @@ def main():
                 budget_id = ObjectId()
                 budget_data = {
                     '_id': budget_id,
-                    'user_id': current_user.id if current_user.is_authenticated else None,
-                    'session_id': session['sid'],
-                    'user_email': current_user.email if current_user.is_authenticated else '',
+                    'user_id': current_user.id,
+                    'user_email': current_user.email,
                     'income': income,
                     'fixed_expenses': expenses,
                     'variable_expenses': 0.0,
@@ -285,7 +284,7 @@ def main():
                 current_app.logger.debug(f"Saving budget data: {budget_data}", extra={'session_id': session['sid']})
                 try:
                     db.budgets.insert_one(budget_data)
-                    if current_user.is_authenticated and not utils.is_admin():
+                    if not utils.is_admin():
                         if not deduct_ficore_credits(db, current_user.id, 1, 'create_budget', budget_id):
                             db.budgets.delete_one({'_id': budget_id})  # Rollback on failure
                             current_app.logger.error(f"Failed to deduct Ficore Credit for creating budget {budget_id} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
@@ -303,9 +302,8 @@ def main():
                         budgets={},
                         latest_budget={
                             'id': None,
-                            'user_id': None,
-                            'session_id': session.get('sid', 'unknown'),
-                            'user_email': current_user.email if current_user.is_authenticated else '',
+                            'user_id': current_user.id,
+                            'user_email': current_user.email,
                             'income': format_currency(0.0),
                             'income_raw': 0.0,
                             'fixed_expenses': format_currency(0.0),
@@ -344,7 +342,7 @@ def main():
                     current_app.logger.warning(f"Budget {budget_id} not found for deletion", extra={'session_id': session.get('sid', 'unknown')})
                     flash(trans("budget_not_found", default='Budget not found.'), "danger")
                     return redirect(url_for('budget.main', tab='dashboard'))
-                if current_user.is_authenticated and not utils.is_admin():
+                if not utils.is_admin():
                     if not utils.check_ficore_credit_balance(required_amount=1, user_id=current_user.id):
                         current_app.logger.warning(f"Insufficient Ficore Credits for deleting budget {budget_id} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                         flash(trans('budget_insufficient_credits', default='Insufficient Ficore Credits to delete a budget. Please purchase more credits.'), 'danger')
@@ -353,13 +351,13 @@ def main():
                     log_tool_usage(
                         tool_name='budget',
                         db=db,
-                        user_id=current_user.id if current_user.is_authenticated else None,
+                        user_id=current_user.id,
                         session_id=session.get('sid', 'unknown'),
                         action='delete_budget'
                     )
                     result = db.budgets.delete_one({'_id': ObjectId(budget_id), **filter_criteria})
                     if result.deleted_count > 0:
-                        if current_user.is_authenticated and not utils.is_admin():
+                        if not utils.is_admin():
                             if not deduct_ficore_credits(db, current_user.id, 1, 'delete_budget', budget_id):
                                 current_app.logger.error(f"Failed to deduct Ficore Credit for deleting budget {budget_id} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                                 flash(trans('budget_credit_deduction_failed', default='Failed to deduct Ficore Credit for deleting budget.'), 'danger')
@@ -382,8 +380,7 @@ def main():
             budget_data = {
                 'id': str(budget['_id']),
                 'user_id': budget.get('user_id'),
-                'session_id': budget.get('session_id'),
-                'user_email': budget.get('user_email', current_user.email if current_user.is_authenticated else ''),
+                'user_email': budget.get('user_email', current_user.email),
                 'income': format_currency(budget.get('income', 0.0)),
                 'income_raw': float(budget.get('income', 0.0)),
                 'fixed_expenses': format_currency(budget.get('fixed_expenses', 0.0)),
@@ -414,9 +411,8 @@ def main():
         if not latest_budget:
             latest_budget = {
                 'id': None,
-                'user_id': None,
-                'session_id': session.get('sid', 'unknown'),
-                'user_email': current_user.email if current_user.is_authenticated else '',
+                'user_id': current_user.id,
+                'user_email': current_user.email,
                 'income': format_currency(0.0),
                 'income_raw': 0.0,
                 'fixed_expenses': format_currency(0.0),
@@ -495,9 +491,8 @@ def main():
             budgets={},
             latest_budget={
                 'id': None,
-                'user_id': None,
-                'session_id': session.get('sid', 'unknown'),
-                'user_email': current_user.email if current_user.is_authenticated else '',
+                'user_id': current_user.id,
+                'user_email': current_user.email,
                 'income': format_currency(0.0),
                 'income_raw': 0.0,
                 'fixed_expenses': format_currency(0.0),
@@ -540,7 +535,7 @@ def summary():
         log_tool_usage(
             tool_name='budget',
             db=db,
-            user_id=current_user.id if current_user.is_authenticated else None,
+            user_id=current_user.id,
             session_id=session.get('sid', 'unknown'),
             action='summary_view'
         )
@@ -550,19 +545,19 @@ def summary():
             current_app.logger.info(f"No budget found for user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
             return jsonify({
                 'totalBudget': format_currency(0.0),
-                'user_email': current_user.email if current_user.is_authenticated else ''
+                'user_email': current_user.email
             })
         total_budget = float(latest_budget.get('income', 0.0))
         current_app.logger.info(f"Fetched budget summary for user {current_user.id}: {total_budget}", extra={'session_id': session.get('sid', 'unknown')})
         return jsonify({
             'totalBudget': format_currency(total_budget),
-            'user_email': latest_budget.get('user_email', current_user.email if current_user.is_authenticated else '')
+            'user_email': latest_budget.get('user_email', current_user.email)
         })
     except Exception as e:
         current_app.logger.error(f"Error in budget.summary: {str(e)}", extra={'session_id': session.get('sid', 'unknown')})
         return jsonify({
             'totalBudget': format_currency(0.0),
-            'user_email': current_user.email if current_user.is_authenticated else ''
+            'user_email': current_user.email
         }), 500
 
 @budget_bp.errorhandler(CSRFError)

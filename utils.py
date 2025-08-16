@@ -442,42 +442,6 @@ def log_tool_usage(action, tool_name=None, details=None, user_id=None, db=None, 
         )
         raise RuntimeError(f"Failed to log tool usage: {str(e)}")
 
-def create_anonymous_session():
-    """
-    Create a guest session for anonymous access with retry logic.
-    """
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            with current_app.app_context():
-                session['sid'] = str(uuid.uuid4())
-                session['is_anonymous'] = True
-                session['created_at'] = datetime.utcnow().isoformat()
-                if 'lang' not in session:
-                    session['lang'] = 'en'
-                session.modified = True
-                logger.info(
-                    f"{trans('general_anonymous_session_created', default='Created anonymous session')}: {session['sid']}",
-                    extra={'session_id': session['sid'], 'ip_address': request.remote_addr if has_request_context() else 'unknown'}
-                )
-                return
-        except Exception as e:
-            logger.warning(
-                f"Attempt {attempt + 1} failed to create anonymous session: {str(e)}",
-                exc_info=True,
-                extra={'session_id': 'no-session-id', 'ip_address': request.remote_addr if has_request_context() else 'unknown'}
-            )
-            if attempt == max_retries - 1:
-                session['sid'] = f'error-{str(uuid.uuid4())[:8]}'
-                session['is_anonymous'] = True
-                session.modified = True
-                logger.error(
-                    f"{trans('general_anonymous_session_error', default='Error creating anonymous session after retries')}: {str(e)}",
-                    exc_info=True,
-                    extra={'session_id': session['sid'], 'ip_address': request.remote_addr if has_request_context() else 'unknown'}
-                )
-                return
-            time.sleep(0.5)
 
 
 def clean_currency(value, max_value=10000000000):
@@ -512,6 +476,12 @@ def clean_currency(value, max_value=10000000000):
                     extra={'session_id': session.get('sid', 'no-session-id') if has_request_context() else 'no-session-id'}
                 )
                 raise ValidationError(trans('bill_amount_max', default=f"Input cannot exceed {max_value:,}", lang=get_user_language()))
+            if result < 0:
+                logger.warning(
+                    f"Negative currency value not allowed: value={result}",
+                    extra={'session_id': session.get('sid', 'no-session-id') if has_request_context() else 'no-session-id'}
+                )
+                raise ValidationError(trans('negative_currency_not_allowed', default='Negative currency values are not allowed', lang=get_user_language()))
             return result
 
         # Convert to string and use a single regex to remove all non-digit, non-decimal-point, non-negative-sign characters
@@ -521,19 +491,15 @@ def clean_currency(value, max_value=10000000000):
             extra={'session_id': session.get('sid', 'no-session-id') if has_request_context() else 'no-session-id'}
         )
         
-        # Remove currency symbols and formatting characters, keeping digits, decimal, and potential negative sign
-        cleaned = re.sub(r'[^\d.-]', '', value_str)
+        # Remove currency symbols and formatting characters, keeping only digits and decimal point
+        cleaned = re.sub(r'[^\d.]', '', value_str)
         
-        # Correctly handle multiple decimal points and multiple negative signs
+        # Handle multiple decimal points
         if cleaned.count('.') > 1:
             parts = cleaned.split('.')
             cleaned = parts[0] + '.' + ''.join(parts[1:])
         
-        # Ensure negative sign is only at the beginning
-        if cleaned.count('-') > 1 or (cleaned.count('-') == 1 and not cleaned.startswith('-')):
-            cleaned = cleaned.replace('-', '')
-        
-        if not cleaned or cleaned == '.' or cleaned == '-':
+        if not cleaned or cleaned == '.':
             logger.warning(
                 f"Invalid currency format after cleaning: original='{value_str}', cleaned='{cleaned}'",
                 extra={'session_id': session.get('sid', 'no-session-id') if has_request_context() else 'no-session-id'}
@@ -919,12 +885,12 @@ def log_user_action(action, details=None, user_id=None):
     except Exception as e:
         logger.error(f"{trans('general_user_action_log_error', default='Error logging user action')}: {str(e)}", exc_info=True)
 
-def get_recent_activities(user_id=None, is_admin_user=False, db=None, session_id=None, limit=10):
+def get_recent_activities(user_id, is_admin_user=False, db=None, session_id=None, limit=10):
     """
     Fetch recent activities across all tools for a user or session.
     
     Args:
-        user_id: ID of the user (optional for admin)
+        user_id: ID of the user (required)
         is_admin_user: Whether the user is an admin (default: False)
         db: MongoDB database instance (optional)
         session_id: Session ID for anonymous users (optional)
@@ -936,7 +902,10 @@ def get_recent_activities(user_id=None, is_admin_user=False, db=None, session_id
     if db is None:
         db = get_mongo_db()
     
-    query = {} if is_admin_user else {'user_id': str(user_id)} if user_id else {'session_id': session_id} if session_id else {}
+    if not user_id and not is_admin_user:
+        raise ValueError("User ID is required for non-admin users")
+    
+    query = {} if is_admin_user else {'user_id': str(user_id)}
     
     try:
         activities = []
@@ -945,7 +914,7 @@ def get_recent_activities(user_id=None, is_admin_user=False, db=None, session_id
         bills = db.bills.find(query).sort('created_at', -1).limit(5)
         for bill in bills:
             if not bill.get('created_at') or not bill.get('bill_name'):
-                logger.warning(f"Skipping invalid bill record: {bill.get('_id')}", extra={'session_id': session_id or 'unknown', 'ip': request.remote_addr or 'unknown'})
+                logger.warning(f"Skipping invalid bill record: {bill.get('_id')}", extra={'session_id': session_id or 'unknown'})
                 continue
             activities.append({
                 'type': 'bill',
@@ -1005,8 +974,8 @@ def get_recent_activities(user_id=None, is_admin_user=False, db=None, session_id
         activities.sort(key=lambda x: x['timestamp'], reverse=True)
         
         logger.debug(
-            f"Fetched {len(activities)} recent activities for {'user ' + str(user_id) if user_id else 'session ' + str(session_id) if session_id else 'all'}",
-            extra={'session_id': session_id or 'unknown', 'ip': request.remote_addr or 'unknown'}
+            f"Fetched {len(activities)} recent activities for user {user_id}",
+            extra={'session_id': session_id or 'unknown'}
         )
         
         return activities[:limit]
@@ -1014,16 +983,16 @@ def get_recent_activities(user_id=None, is_admin_user=False, db=None, session_id
         logger.error(
             f"Failed to fetch recent activities: {str(e)}",
             exc_info=True,
-            extra={'session_id': session_id or 'unknown', 'ip': request.remote_addr or 'unknown'}
+            extra={'session_id': session_id or 'unknown'}
         )
         raise
 
-def get_all_recent_activities(user_id=None, is_admin_user=False, db=None, session_id=None, limit=10):
+def get_all_recent_activities(user_id, is_admin_user=False, db=None, session_id=None, limit=10):
     """
     Fetch recent activities across all tools for a user or session.
     
     Args:
-        user_id: ID of the user (optional for admin)
+        user_id: ID of the user (required)
         is_admin_user: Whether the user is an admin (default: False)
         db: MongoDB database instance (optional)
         session_id: Session ID for anonymous users (optional)
@@ -1096,7 +1065,7 @@ def send_whatsapp_reminder(phone, message):
 # Export all functions and variables
 __all__ = [
     'login_manager', 'clean_currency', 'log_tool_usage', 'flask_session', 'csrf', 'limiter',
-    'get_limiter', 'create_anonymous_session', 'trans_function', 'is_valid_email',
+    'get_limiter', 'trans_function', 'is_valid_email',
     'get_mongo_db', 'close_mongo_db', 'get_mail', 'requires_role',
     'get_user_query', 'is_admin', 'format_currency', 'format_date', 'sanitize_input',
     'generate_unique_id', 'validate_required_fields', 'get_user_language',

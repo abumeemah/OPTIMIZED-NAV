@@ -54,7 +54,7 @@ app.config.from_mapping(
     ADMIN_PASSWORD=os.getenv('ADMIN_PASSWORD'),
     SESSION_TYPE='mongodb',
     SESSION_PERMANENT=False,
-    PERMANENT_SESSION_LIFETIME=timedelta(minutes=5),
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=os.getenv('FLASK_ENV', 'development') == 'production',
     SESSION_COOKIE_HTTPONLY=True,
@@ -122,13 +122,12 @@ def create_app():
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if 'sid' not in session:
-                if not current_user.is_authenticated:
-                    utils.create_anonymous_session()
-                    logger.info(f'New anonymous session created: {session["sid"]}')
-                else:
+                if current_user.is_authenticated:
                     session['sid'] = str(uuid.uuid4())
                     session['is_anonymous'] = False
                     logger.info(f'New session for user {current_user.id}: {session["sid"]}')
+                else:
+                    return redirect(url_for('users.login'))
             return f(*args, **kwargs)
         return decorated_function
 
@@ -146,7 +145,7 @@ def create_app():
 
     # Setup session
     logger.info('Creating TTL index for sessions collection')
-    app.extensions['mongo']['ficodb'].sessions.create_index("created_at", expireAfterSeconds=300)
+    app.extensions['mongo']['ficodb'].sessions.create_index("created_at", expireAfterSeconds=1800)
 
     # Register blueprints
     app.register_blueprint(users_bp, url_prefix='/users')

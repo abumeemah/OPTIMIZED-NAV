@@ -60,10 +60,9 @@ def initialize_app_data(app):
                     'validator': {
                         '$jsonSchema': {
                             'bsonType': 'object',
-                            'required': ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'unit', 'session_id'],
+                            'required': ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'unit'],
                             'properties': {
-                                'user_id': {'bsonType': ['string', 'null']},
-                                'session_id': {'bsonType': 'string'},
+                                'user_id': {'bsonType': 'string'},
                                 'list_id': {'bsonType': 'string'},
                                 'name': {'bsonType': 'string'},
                                 'quantity': {'bsonType': 'int', 'minimum': 1, 'maximum': 1000},
@@ -80,7 +79,6 @@ def initialize_app_data(app):
                     },
                     'indexes': [
                         {'key': [('user_id', ASCENDING), ('list_id', ASCENDING)]},
-                        {'key': [('session_id', ASCENDING), ('list_id', ASCENDING)]},
                         {'key': [('created_at', DESCENDING)]}
                     ]
                 },
@@ -88,11 +86,10 @@ def initialize_app_data(app):
                     'validator': {
                         '$jsonSchema': {
                             'bsonType': 'object',
-                            'required': ['name', 'session_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status', 'collaborators'],
+                            'required': ['name', 'user_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status', 'collaborators'],
                             'properties': {
                                 'name': {'bsonType': 'string'},
-                                'user_id': {'bsonType': ['string', 'null']},
-                                'session_id': {'bsonType': 'string'},
+                                'user_id': {'bsonType': 'string'},
                                 'budget': {'bsonType': 'double', 'minimum': 0.01, 'maximum': 10000000000},
                                 'created_at': {'bsonType': 'date'},
                                 'updated_at': {'bsonType': 'date'},
@@ -106,8 +103,7 @@ def initialize_app_data(app):
                         }
                     },
                     'indexes': [
-                        {'key': [('user_id', ASCENDING), ('status', ASCENDING), ('updated_at', DESCENDING)]},
-                        {'key': [('session_id', ASCENDING), ('status', ASCENDING), ('updated_at', DESCENDING)]}
+                        {'key': [('user_id', ASCENDING), ('status', ASCENDING), ('updated_at', DESCENDING)]}
                     ]
                 },
                 'budgets': {
@@ -117,7 +113,6 @@ def initialize_app_data(app):
                             'required': ['user_id', 'income', 'fixed_expenses', 'variable_expenses', 'created_at'],
                             'properties': {
                                 'user_id': {'bsonType': 'string'},
-                                'session_id': {'bsonType': ['string', 'null']},
                                 'income': {'bsonType': 'double', 'minimum': 0},
                                 'fixed_expenses': {'bsonType': 'double', 'minimum': 0},
                                 'variable_expenses': {'bsonType': 'double', 'minimum': 0},
@@ -134,8 +129,7 @@ def initialize_app_data(app):
                         }
                     },
                     'indexes': [
-                        {'key': [('user_id', ASCENDING), ('created_at', DESCENDING)]},
-                        {'key': [('session_id', ASCENDING), ('created_at', DESCENDING)]}
+                        {'key': [('user_id', ASCENDING), ('created_at', DESCENDING)]}
                     ]
                 },
                 'bills': {
@@ -145,7 +139,6 @@ def initialize_app_data(app):
                             'required': ['user_id', 'bill_name', 'amount', 'due_date', 'status'],
                             'properties': {
                                 'user_id': {'bsonType': 'string'},
-                                'session_id': {'bsonType': ['string', 'null']},
                                 'bill_name': {'bsonType': 'string'},
                                 'amount': {'bsonType': 'double', 'minimum': 0},
                                 'due_date': {'bsonType': 'date'},
@@ -165,7 +158,6 @@ def initialize_app_data(app):
                     },
                     'indexes': [
                         {'key': [('user_id', ASCENDING), ('due_date', ASCENDING)]},
-                        {'key': [('session_id', ASCENDING), ('due_date', ASCENDING)]},
                         {'key': [('status', ASCENDING)]}
                     ]
                 },
@@ -176,7 +168,6 @@ def initialize_app_data(app):
                             'required': ['user_id', 'notification_id', 'type', 'message', 'sent_at'],
                             'properties': {
                                 'user_id': {'bsonType': 'string'},
-                                'session_id': {'bsonType': ['string', 'null']},
                                 'notification_id': {'bsonType': 'string'},
                                 'type': {'enum': ['email', 'sms', 'whatsapp']},
                                 'message': {'bsonType': 'string'},
@@ -186,8 +177,7 @@ def initialize_app_data(app):
                         }
                     },
                     'indexes': [
-                        {'key': [('user_id', ASCENDING), ('sent_at', DESCENDING)]},
-                        {'key': [('session_id', ASCENDING), ('sent_at', DESCENDING)]}
+                        {'key': [('user_id', ASCENDING), ('sent_at', DESCENDING)]}
                     ]
                 }
             }
@@ -387,22 +377,21 @@ def create_shopping_item(db, item_data):
         str: ID of the created shopping item
     """
     try:
-        required_fields = ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'session_id']
+        required_fields = ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'user_id']
         if not all(field in item_data for field in required_fields):
             raise ValueError(trans('general_missing_shopping_item_fields', default='Missing required shopping item fields'))
         item_data['unit'] = item_data.get('unit', 'piece')
-        item_data['session_id'] = str(item_data['session_id'])  # Ensure session_id is a string
         result = db.shopping_items.insert_one(item_data)
         logger.info(f"{trans('general_shopping_item_created', default='Created shopping item with ID')}: {result.inserted_id}", 
-                   extra={'session_id': item_data.get('session_id', 'no-session-id')})
+                   extra={'session_id': 'no-session-id'})
         return str(result.inserted_id)
     except WriteError as e:
         logger.error(f"{trans('general_shopping_item_creation_error', default='Error creating shopping item')}: {str(e)}", 
-                     exc_info=True, extra={'session_id': item_data.get('session_id', 'no-session-id')})
+                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
     except Exception as e:
         logger.error(f"{trans('general_shopping_item_creation_error', default='Error creating shopping item')}: {str(e)}", 
-                     exc_info=True, extra={'session_id': item_data.get('session_id', 'no-session-id')})
+                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
 
 def get_shopping_items(db, filter_kwargs):
@@ -430,7 +419,6 @@ def to_dict_shopping_item(record):
     return {
         'id': str(record.get('_id', '')),
         'user_id': record.get('user_id', ''),
-        'session_id': record.get('session_id', ''),
         'list_id': record.get('list_id', ''),
         'name': record.get('name', ''),
         'quantity': record.get('quantity', 0),
@@ -566,24 +554,23 @@ def create_shopping_list(db, list_data):
         str: ID of the created shopping list
     """
     try:
-        required_fields = ['name', 'session_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status']
+        required_fields = ['name', 'user_id', 'budget', 'created_at', 'updated_at', 'total_spent', 'status']
         if not all(field in list_data for field in required_fields):
             raise ValueError(trans('general_missing_shopping_list_fields', default='Missing required shopping list fields'))
-        list_data['session_id'] = str(list_data['session_id'])  # Ensure session_id is a string
         list_data['_id'] = ObjectId()
         list_data['collaborators'] = list_data.get('collaborators', [])
         result = db.shopping_lists.insert_one(list_data)
         logger.info(f"{trans('general_shopping_list_created', default='Created shopping list with ID')}: {result.inserted_id}", 
-                   extra={'session_id': list_data.get('session_id', 'no-session-id')})
+                   extra={'session_id': 'no-session-id'})
         get_shopping_lists.cache_clear()
         return str(result.inserted_id)
     except WriteError as e:
         logger.error(f"{trans('general_shopping_list_creation_error', default='Error creating shopping list')}: {str(e)}", 
-                     exc_info=True, extra={'session_id': list_data.get('session_id', 'no-session-id')})
+                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
     except Exception as e:
         logger.error(f"{trans('general_shopping_list_creation_error', default='Error creating shopping list')}: {str(e)}", 
-                     exc_info=True, extra={'session_id': list_data.get('session_id', 'no-session-id')})
+                     exc_info=True, extra={'session_id': 'no-session-id'})
         raise
 
 def normalize_shopping_list(record):
@@ -599,8 +586,7 @@ def normalize_shopping_list(record):
     return {
         'id': str(record.get('_id', '')),
         'name': record.get('name', ''),
-        'user_id': record.get('user_id', None),
-        'session_id': str(record.get('session_id', '')),  # Ensure session_id is a string
+        'user_id': record.get('user_id', ''),
         'budget': float(record.get('budget', 0.0)),
         'created_at': record.get('created_at', datetime.utcnow()),
         'updated_at': record.get('updated_at', datetime.utcnow()),
@@ -701,7 +687,6 @@ def to_dict_shopping_list(record):
         'id': str(record.get('_id', '')),
         'name': record.get('name', ''),
         'user_id': record.get('user_id', ''),
-        'session_id': str(record.get('session_id', '')),  # Ensure session_id is a string
         'budget': record.get('budget', 0.0),
         'created_at': record.get('created_at'),
         'updated_at': record.get('updated_at'),
@@ -763,24 +748,23 @@ def create_shopping_items_bulk(db, items_data):
         list: List of IDs of the created shopping items
     """
     try:
-        required_fields = ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'session_id']
+        required_fields = ['list_id', 'name', 'quantity', 'price', 'category', 'status', 'created_at', 'updated_at', 'user_id']
         for item in items_data:
             if not all(field in item for field in required_fields):
                 raise ValueError(f"Missing required fields in item: {item}")
-            item['session_id'] = str(item['session_id'])  # Ensure session_id is a string
             item['unit'] = item.get('unit', 'piece')
         
         result = db.shopping_items.insert_many(items_data)
         logger.info(f"Created {len(result.inserted_ids)} shopping items", 
-                   extra={'session_id': items_data[0].get('session_id', 'no-session-id')})
+                   extra={'session_id': 'no-session-id'})
         return [str(id) for id in result.inserted_ids]
     except WriteError as e:
         logger.error(f"Error creating bulk shopping items: {str(e)}", 
-                    exc_info=True, extra={'session_id': items_data[0].get('session_id', 'no-session-id') if items_data else 'no-session-id'})
+                    exc_info=True, extra={'session_id': 'no-session-id'})
         raise
     except Exception as e:
         logger.error(f"Error creating bulk shopping items: {str(e)}", 
-                    exc_info=True, extra={'session_id': items_data[0].get('session_id', 'no-session-id') if items_data else 'no-session-id'})
+                    exc_info=True, extra={'session_id': 'no-session-id'})
         raise
 
 def update_budget(db, budget_id, update_data):
@@ -1107,15 +1091,18 @@ def log_tool_usage(tool_name, db, user_id=None, session_id=None, action=None):
     Args:
         tool_name: Name of the tool
         db: MongoDB database instance
-        user_id: User ID (optional)
+        user_id: User ID (required)
         session_id: Session ID (optional)
         action: Action performed (optional)
     """
     try:
+        if not user_id:
+            raise ValueError("User ID is required for tool usage logging")
+            
         log_entry = {
             'tool_name': tool_name,
             'user_id': user_id,
-            'session_id': str(session_id) if session_id else 'no-session-id',  # Ensure session_id is a string
+            'session_id': str(session_id) if session_id else 'no-session-id',
             'action': action,
             'timestamp': datetime.utcnow()
         }
