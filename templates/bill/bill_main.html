@@ -55,7 +55,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="{{ form.amount.id }}" class="form-label">{{ trans('bill_amount', default='Amount') }}</label>
-                                    {{ form.amount(class="form-control number-input", placeholder=trans('bill_amount_placeholder', default='e.g., 5000.00'), required=True, value='' if form.amount.data is none else format_currency(form.amount.data)) }}
+                                    {{ form.amount(class="form-control number-input", placeholder=trans('bill_amount_placeholder', default='e.g., 5000.00'), required=True, min="0", max="10000000000", step="0.01", value='' if form.amount.data is none else form.amount.data|string) }}
                                     <div class="invalid-feedback">{{ trans('bill_amount_invalid', default='Please enter a valid number (e.g., 5000 or 5000.00)') }}</div>
                                     <small id="amount_help" class="form-text text-muted">{{ trans('bill_amount_help', default='Enter amount without commas (e.g., 5000 or 5000.00)') }}</small>
                                 </div>
@@ -113,7 +113,7 @@
                                 </div>
                                 <div class="mb-3" id="reminder_days_container" style="display: {{ 'block' if form.send_email.data else 'none' }};">
                                     <label for="{{ form.reminder_days.id }}" class="form-label">{{ trans('bill_reminder_days', default='Reminder Days') }}</label>
-                                    {{ form.reminder_days(class="form-control number-input", placeholder=trans('bill_reminder_days_placeholder', default='e.g., 7'), value='' if form.reminder_days.data is none else form.reminder_days.data) }}
+                                    {{ form.reminder_days(class="form-control number-input", placeholder=trans('bill_reminder_days_placeholder', default='e.g., 7'), min="1", max="30", value='' if form.reminder_days.data is none else form.reminder_days.data) }}
                                     <div class="invalid-feedback">{{ trans('bill_reminder_days_invalid', default='Please enter a valid integer (e.g., 7)') }}</div>
                                     <small id="reminder_days_help" class="form-text text-muted">{{ trans('bill_reminder_days_example', default='Example: 7 for a reminder 7 days before due date') }}</small>
                                 </div>
@@ -150,7 +150,7 @@
                                             <div class="col-md-4">
                                                 <div class="mb-3">
                                                     <label class="form-label">{{ trans('bill_amount', default='Amount') }}</label>
-                                                    {{ edit_form.amount(class="form-control number-input", required=True, value='' if edit_form.amount.data is none else format_currency(edit_form.amount.data)) }}
+                                                    {{ edit_form.amount(class="form-control number-input", required=True, min="0", max="10000000000", step="0.01", value='' if edit_form.amount.data is none else edit_form.amount.data|string) }}
                                                     <div class="invalid-feedback">{{ trans('bill_amount_invalid', default='Please enter a valid number (e.g., 5000 or 5000.00)') }}</div>
                                                     <small id="amount_help_{{ bill_id }}" class="form-text text-muted">{{ trans('bill_amount_help', default='Enter amount without commas (e.g., 5000 or 5000.00)') }}</small>
                                                 </div>
@@ -192,7 +192,7 @@
                                             <div class="col-md-4">
                                                 <div class="reminder-days-container" style="display: {{ 'block' if edit_form.send_email.data else 'none' }};">
                                                     <label class="form-label">{{ trans('bill_reminder_days', default='Reminder Days') }}</label>
-                                                    {{ edit_form.reminder_days(class="form-control number-input", value='' if edit_form.reminder_days.data is none else edit_form.reminder_days.data) }}
+                                                    {{ edit_form.reminder_days(class="form-control number-input", min="1", max="30", value='' if edit_form.reminder_days.data is none else edit_form.reminder_days.data) }}
                                                     <div class="invalid-feedback">{{ trans('bill_reminder_days_invalid', default='Please enter a valid integer (e.g., 7)') }}</div>
                                                     <small id="reminder_days_help_{{ bill_id }}" class="form-text text-muted">{{ trans('bill_reminder_days_example', default='Example: 7 for a reminder 7 days before due date') }}</small>
                                                 </div>
@@ -453,12 +453,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper function to clean input for parsing
     function cleanForParse(value) {
         if (!value) return '';
-        let clean = value.toString().replace(/,/g, '');
-        const parts = clean.split('.');
-        if (parts.length > 2) {
-            clean = parts[0] + '.' + parts.slice(1).join('');
-        }
-        return clean;
+        return value.toString().replace(/[^\d.]/g, '');
     }
 
     // Handle number inputs (amount and reminder_days)
@@ -467,58 +462,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const helpId = isReminderDays ? `reminder_days_help${input.id.replace('reminder_days', '')}` : `amount_help${input.id.replace('amount', '')}`;
         const originalHelpText = translations[isReminderDays ? 'reminder_days_help' : 'amount_help'];
 
-        // Show raw value on focus
-        input.addEventListener('focus', function() {
-            input.value = cleanForParse(input.value);
-            input.classList.remove('is-invalid');
-            document.getElementById(helpId).innerText = originalHelpText;
-        });
-
-        // Format and validate on blur
-        input.addEventListener('blur', function() {
-            let rawValue = cleanForParse(input.value);
-            let numValue;
-
-            if (isReminderDays) {
-                numValue = parseInt(rawValue) || null;
-                if (numValue !== null) {
-                    if (numValue > 30) {
-                        numValue = 30;
-                        input.classList.add('is-invalid');
-                        document.getElementById(helpId).innerText = translations['reminder_days_max'];
-                    } else if (numValue < 1) {
-                        numValue = 1;
-                        input.classList.add('is-invalid');
-                        document.getElementById(helpId).innerText = translations['reminder_days_min'];
-                    } else {
-                        input.classList.remove('is-invalid');
-                        document.getElementById(helpId).innerText = originalHelpText;
-                    }
-                    input.value = formatForDisplay(numValue, true);
-                } else {
-                    input.classList.remove('is-invalid');
-                    document.getElementById(helpId).innerText = originalHelpText;
-                    input.value = '';
-                }
-            } else {
-                numValue = parseFloat(rawValue) || 0;
-                if (numValue > 10000000000) {
-                    numValue = 10000000000;
-                    input.classList.add('is-invalid');
-                    document.getElementById(helpId).innerText = translations['amount_max'];
-                } else if (numValue < 0) {
-                    numValue = 0;
-                    input.classList.add('is-invalid');
-                    document.getElementById(helpId).innerText = translations['amount_positive'];
-                } else {
-                    input.classList.remove('is-invalid');
-                    document.getElementById(helpId).innerText = originalHelpText;
-                }
-                input.value = formatForDisplay(numValue);
-            }
-        });
-
-        // Clean invalid characters while typing
+        // Clean input while typing
         input.addEventListener('input', function() {
             let value = input.value;
             let cleanedValue;
@@ -531,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (parts.length > 2) {
                     cleanedValue = parts[0] + '.' + parts.slice(1).join('');
                 }
-                if (parts[1]?.length > 2) {
+                if (parts[1] && parts[1].length > 2) {
                     cleanedValue = parts[0] + '.' + parts[1].slice(0, 2);
                 }
             }
@@ -544,30 +488,67 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // Clear validation state on focus
+        input.addEventListener('focus', function() {
+            input.classList.remove('is-invalid');
+            const helpElement = document.getElementById(helpId);
+            if (helpElement) {
+                helpElement.innerText = originalHelpText;
+                helpElement.classList.remove('text-danger');
+            }
+        });
+
+        // Validate and format on blur
+        input.addEventListener('blur', function() {
+            const rawValue = cleanForParse(input.value);
+            const numValue = isReminderDays ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
+            const helpElement = document.getElementById(helpId);
+
+            // Validate input
+            let isValid = true;
+            if (isReminderDays) {
+                isValid = numValue >= 1 && numValue <= 30;
+                if (!isValid && helpElement) {
+                    if (numValue > 30) {
+                        helpElement.innerText = translations['reminder_days_max'];
+                    } else if (numValue < 1) {
+                        helpElement.innerText = translations['reminder_days_min'];
+                    }
+                }
+            } else {
+                isValid = numValue >= 0 && numValue <= 10000000000;
+                if (!isValid && helpElement) {
+                    if (numValue > 10000000000) {
+                        helpElement.innerText = translations['amount_max'];
+                    } else if (numValue < 0) {
+                        helpElement.innerText = translations['amount_positive'];
+                    }
+                }
+            }
+            
+            if (isValid) {
+                input.classList.remove('is-invalid');
+                if (helpElement) {
+                    helpElement.innerText = originalHelpText;
+                    helpElement.classList.remove('text-danger');
+                }
+            } else {
+                input.classList.add('is-invalid');
+                if (helpElement) {
+                    helpElement.classList.add('text-danger');
+                }
+            }
+            
+            input.value = isReminderDays ? numValue.toString() : numValue.toFixed(2);
+        });
+
         // Handle pasted input
         input.addEventListener('paste', function(e) {
             e.preventDefault();
             const pasted = (e.clipboardData || window.clipboardData).getData('text');
-            let clean = cleanForParse(pasted);
-            let numValue;
-
-            if (isReminderDays) {
-                numValue = parseInt(clean) || null;
-                if (numValue !== null) {
-                    numValue = Math.max(1, Math.min(30, numValue));
-                    input.value = formatForDisplay(numValue, true);
-                } else {
-                    input.value = '';
-                }
-                input.classList.remove('is-invalid');
-                document.getElementById(helpId).innerText = originalHelpText;
-            } else {
-                numValue = parseFloat(clean) || 0;
-                numValue = Math.max(0, Math.min(10000000000, numValue));
-                input.value = formatForDisplay(numValue);
-                input.classList.remove('is-invalid');
-                document.getElementById(helpId).innerText = originalHelpText;
-            }
+            const cleaned = cleanForParse(pasted);
+            input.value = cleaned;
+            input.dispatchEvent(new Event('blur'));
         });
 
         // Format pre-filled values
@@ -584,35 +565,25 @@ document.addEventListener('DOMContentLoaded', function() {
             // Validate number inputs
             form.querySelectorAll('.number-input').forEach(input => {
                 const isReminderDays = input.id === 'reminder_days' || input.id.startsWith('reminder_days_');
-                const helpId = isReminderDays ? `reminder_days_help${input.id.replace('reminder_days', '')}` : `amount_help${input.id.replace('amount', '')}`;
-                let rawValue = cleanForParse(input.value);
-                let numValue;
+                const rawValue = cleanForParse(input.value);
+                const numValue = isReminderDays ? parseInt(rawValue) || 0 : parseFloat(rawValue) || 0;
 
+                // Validate based on field type and requirements
                 if (isReminderDays) {
-                    numValue = parseInt(rawValue) || null;
-                    if (form.querySelector('#send_email' + (input.id.replace('remர
-
-                    reminder_days')?.checked && (numValue === null || numValue < 1 || numValue > 30)) {
+                    const emailCheckbox = form.querySelector('#send_email' + input.id.replace('reminder_days', ''));
+                    if (emailCheckbox && emailCheckbox.checked && (numValue < 1 || numValue > 30)) {
                         input.classList.add('is-invalid');
-                        document.getElementById(helpId).innerText = translations['reminder_days_invalid'];
                         isValid = false;
-                    } else {
-                        input.classList.remove('is-invalid');
-                        document.getElementById(helpId).innerText = translations['reminder_days_help'];
-                        input.value = numValue ? formatForDisplay(numValue, true) : '';
                     }
                 } else {
-                    numValue = parseFloat(rawValue) || null;
-                    if (numValue === null || numValue < 0 || numValue > 10000000000) {
+                    if (input.hasAttribute('required') && (numValue <= 0 || numValue > 10000000000)) {
                         input.classList.add('is-invalid');
-                        document.getElementById(helpId).innerText = numValue === null ? translations['amount_invalid'] : numValue < 0 ? translations['amount_positive'] : translations['amount_max'];
                         isValid = false;
-                    } else {
-                        input.classList.remove('is-invalid');
-                        document.getElementById(helpId).innerText = translations['amount_help'];
-                        input.value = formatForDisplay(numValue);
                     }
                 }
+                
+                // Set clean value for submission
+                input.value = isReminderDays ? numValue.toString() : numValue.toString();
             });
 
             // Validate required fields
@@ -629,19 +600,15 @@ document.addEventListener('DOMContentLoaded', function() {
             form.querySelectorAll('input[type="date"]').forEach(input => {
                 if (input.required && (!input.value || input.value < new Date().toISOString().split('T')[0])) {
                     input.classList.add('is-invalid');
-                    document.getElementById('due_date_help')?.classList.add('text-danger');
-                    document.getElementById('due_date_help')?.setAttribute('data-error', translations['due_date_future']);
                     isValid = false;
                 } else {
                     input.classList.remove('is-invalid');
-                    document.getElementById('due_date_help')?.classList.remove('text-danger');
-                    document.getElementById('due_date_help')?.setAttribute('data-error', translations['due_date_future']);
                 }
             });
 
             // Validate email reminders
             form.querySelectorAll('.form-check-input[id^="send_email"]').forEach(checkbox => {
-                if (checkbox.checked && {{ 'false' if not current_user.is_authenticated else 'true' }}) {
+                if (checkbox.checked && {{ 'true' if current_user.is_authenticated else 'false' }}) {
                     checkbox.classList.remove('is-invalid');
                 } else if (checkbox.checked) {
                     checkbox.classList.add('is-invalid');
@@ -666,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const form = this.closest('form');
             const container = form.querySelector('.reminder-days-container') || form.querySelector('#reminder_days_container');
             if (container) {
-                container.style.display = this.checked && {{ 'true' if current_user.is_authenticated else 'false' }} ? 'block' : 'none';
+                container.style.display = this.checked ? 'block' : 'none';
             }
         });
     });

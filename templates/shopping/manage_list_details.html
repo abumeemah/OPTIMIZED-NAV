@@ -19,7 +19,7 @@
             </div>
             <div class="mb-3">
                 <label for="list_budget" class="form-label">{{ t('shopping_budget', default='Budget') | e }}</label>
-                <input type="text" name="list_budget" id="list_budget" class="form-control number-input" data-allow-commas="true" value="{{ selected_list.budget_raw | string | replace(',', '') | e }}" required>
+                <input type="number" name="list_budget" id="list_budget" class="form-control number-input" min="0.01" max="10000000000" step="0.01" value="{{ selected_list.budget_raw | e }}" required>
                 <div class="invalid-feedback">{{ t('shopping_budget_required', default='Budget is required') | e }}</div>
             </div>
             <button type="submit" class="btn btn-primary">
