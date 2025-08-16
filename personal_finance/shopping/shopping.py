@@ -18,7 +18,6 @@ from io import BytesIO
 from contextlib import nullcontext
 import uuid
 from models import log_tool_usage, get_shopping_lists
-from session_utils import create_anonymous_session
 import json
 
 shopping_bp = Blueprint(
