@@ -10,7 +10,6 @@ from translations import trans
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from utils import get_all_recent_activities, requires_role, is_admin, get_mongo_db, limiter, log_tool_usage, check_ficore_credit_balance
-from session_utils import create_anonymous_session
 from decimal import Decimal, InvalidOperation
 import re
 
