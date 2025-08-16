@@ -10,7 +10,6 @@ import re
 from translations import trans
 from bson import ObjectId
 from models import log_tool_usage
-# Anonymous session functionality removed
 import uuid
 
 budget_bp = Blueprint(
