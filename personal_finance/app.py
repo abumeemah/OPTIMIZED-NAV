@@ -102,6 +102,14 @@ class User(UserMixin):
 
     def get_id(self):
         return str(self.id)
+    
+    def get_first_name(self):
+        """Get the first name from display_name or email"""
+        if self.display_name and self.display_name != self.id:
+            # If display_name is set and not just the ID, use it
+            return self.display_name.split()[0] if ' ' in self.display_name else self.display_name
+        # Otherwise, extract from email
+        return self.email.split('@')[0] if '@' in self.email else self.id
 
 
 # App setup

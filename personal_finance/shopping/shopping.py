@@ -71,7 +71,7 @@ def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_sessi
                 with session_to_use.start_transaction() if not mongo_session else nullcontext():
                     result = db.users.update_one(
                         {'_id': user_id},
-                        [{'$set': {'ficore_credit_balance': {'$toInt': {'$subtract': ['$ficore_credit_balance', amount]}}}}],
+                        [{'$set': {'ficore_credit_balance': {'$toDouble': {'$subtract': ['$ficore_credit_balance', amount]}}}}],
                         session=session_to_use
                     )
                     if result.modified_count == 0:
@@ -422,13 +422,13 @@ def main():
                     flash(trans('shopping_list_error', default=f'Error saving list: {str(e)}'), 'danger')
                     return redirect(url_for('shopping.main', tab='create-list'))
             else:
-                errors = {field: [trans(error, default=error) for error in field_errors] for field, field_errors in list_form.errors.items()}
-                logger.debug(f"Form validation failed: {errors}", extra={'session_id': session.get('sid', 'no-session-id')})
+                form_errors = {field: [trans(error, default=error) for error in field_errors] for field, field_errors in list_form.errors.items()}
+                logger.debug(f"Form validation failed: {form_errors}", extra={'session_id': session.get('sid', 'no-session-id')})
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({
                         'success': False,
                         'error': trans('shopping_form_invalid', default='Invalid form data.'),
-                        'errors': errors
+                        'errors': form_errors
                     }), 400
                 for field, field_errors in list_form.errors.items():
                     for error in field_errors:
