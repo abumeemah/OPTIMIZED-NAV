@@ -56,6 +56,22 @@ class BillFormProcessor:
             raise ValueError(trans('bill_amount_invalid', default=f"Invalid amount format: {e}"))
 
     @staticmethod
+    def safe_clean_currency_input(value):
+        """Safe version of clean_currency_input that doesn't raise exceptions for form filters."""
+        try:
+            return BillFormProcessor.clean_currency_input(value)
+        except (ValueError, InvalidOperation):
+            return None
+
+    @staticmethod
+    def safe_validate_date_input(form, field):
+        """Safe version of validate_date_input for form validators."""
+        try:
+            BillFormProcessor.validate_date_input(field.data)
+        except ValueError as e:
+            raise ValidationError(str(e))
+
+    @staticmethod
     def clean_integer_input(value, min_val=None, max_val=None):
         """Clean and convert integer input (like reminder days)."""
         if not value:
@@ -115,13 +131,19 @@ class BillFormProcessor:
             if not cleaned_data['bill_name']:
                 errors.append(trans('bill_bill_name_required', default="Bill name cannot be empty"))
             
-            cleaned_data['amount'] = BillFormProcessor.clean_currency_input(form_data['amount'])
-            if cleaned_data['amount'] is None:
-                errors.append(trans('bill_amount_required', default="Valid amount is required"))
+            try:
+                cleaned_data['amount'] = BillFormProcessor.clean_currency_input(form_data['amount'])
+                if cleaned_data['amount'] is None:
+                    errors.append(trans('bill_amount_required', default="Bill amount is required"))
+            except ValueError as e:
+                errors.append(str(e))
             
-            cleaned_data['due_date'] = BillFormProcessor.validate_date_input(form_data['due_date'])
-            if cleaned_data['due_date'] is None:
-                errors.append(trans('bill_due_date_required', default="Valid due date is required"))
+            try:
+                cleaned_data['due_date'] = BillFormProcessor.validate_date_input(form_data['due_date'])
+                if cleaned_data['due_date'] is None:
+                    errors.append(trans('bill_due_date_required', default="Valid due date is required"))
+            except ValueError as e:
+                errors.append(str(e))
             
             valid_frequencies = ['one-time', 'weekly', 'monthly', 'quarterly']
             frequency = form_data['frequency'].strip().lower()
@@ -147,9 +169,13 @@ class BillFormProcessor:
             
             reminder_days = form_data.get('reminder_days')
             if cleaned_data['send_email'] and reminder_days:
-                cleaned_data['reminder_days'] = BillFormProcessor.clean_integer_input(
-                    reminder_days, min_val=1, max_val=30
-                )
+                try:
+                    cleaned_data['reminder_days'] = BillFormProcessor.clean_integer_input(
+                        reminder_days, min_val=1, max_val=30
+                    )
+                except ValueError as e:
+                    errors.append(str(e))
+                    cleaned_data['reminder_days'] = 7  # fallback
             elif cleaned_data['send_email']:
                 cleaned_data['reminder_days'] = 7
             else:
@@ -230,9 +256,9 @@ class BillForm(FlaskForm):
     )
     amount = DecimalField(
         trans('bill_amount', default='Amount'),
-        filters=[lambda x: BillFormProcessor.clean_currency_input(x) if x else None],
+        filters=[lambda x: BillFormProcessor.safe_clean_currency_input(x) if x else None],
         validators=[
-            DataRequired(message=trans('bill_amount_required', default='Valid amount is required')),
+            DataRequired(message=trans('bill_amount_required', default='Bill amount is required')),
             NumberRange(min=0, max=10000000000, message=trans('bill_amount_max', default='Input cannot exceed 10 billion'))
         ]
     )
@@ -240,7 +266,7 @@ class BillForm(FlaskForm):
         trans('bill_due_date', default='Due Date'),
         validators=[
             DataRequired(message=trans('bill_due_date_required', default='Valid due date is required')),
-            lambda form, field: BillFormProcessor.validate_date_input(field.data) or None
+            BillFormProcessor.safe_validate_date_input
         ]
     )
     frequency = SelectField(
@@ -326,9 +352,9 @@ class BillForm(FlaskForm):
 class EditBillForm(FlaskForm):
     amount = DecimalField(
         trans('bill_amount', default='Amount'),
-        filters=[lambda x: BillFormProcessor.clean_currency_input(x) if x else None],
+        filters=[lambda x: BillFormProcessor.safe_clean_currency_input(x) if x else None],
         validators=[
-            DataRequired(message=trans('bill_amount_required', default='Valid amount is required')),
+            DataRequired(message=trans('bill_amount_required', default='Bill amount is required')),
             NumberRange(min=0, max=10000000000, message=trans('bill_amount_max', default='Input cannot exceed 10 billion'))
         ]
     )
