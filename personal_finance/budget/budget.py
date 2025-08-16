@@ -5,11 +5,12 @@ from wtforms import FloatField, IntegerField, SubmitField
 from wtforms.validators import DataRequired, NumberRange, ValidationError
 from flask_login import current_user, login_required
 import utils
+from utils import logger
 from datetime import datetime
 import re
 from translations import trans
 from bson import ObjectId
-from models import log_tool_usage
+from models import log_tool_usage, create_budget
 import uuid
 
 budget_bp = Blueprint(
@@ -350,14 +351,14 @@ def main():
                 }
                 current_app.logger.debug(f"Saving budget data: {budget_data}", extra={'session_id': session['sid']})
                 try:
-                    db.budgets.insert_one(budget_data)
+                    created_budget_id = create_budget(db, budget_data)
                     if current_user.is_authenticated and not utils.is_admin():
                         if not deduct_ficore_credits(db, current_user.id, 1, 'create_budget', budget_id):
                             db.budgets.delete_one({'_id': budget_id})  # Rollback on failure
                             current_app.logger.error(f"Failed to deduct Ficore Credit for creating budget {budget_id} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                             flash(trans('budget_credit_deduction_failed', default='Failed to deduct Ficore Credit for creating budget.'), 'danger')
                             return redirect(url_for('budget.main', tab='create-budget'))
-                    current_app.logger.info(f"Budget {budget_id} saved successfully to MongoDB for session {session['sid']}", extra={'session_id': session['sid']})
+                    current_app.logger.info(f"Budget {created_budget_id} saved successfully to MongoDB for session {session['sid']}", extra={'session_id': session['sid']})
                     flash(trans("budget_completed_success", default='Budget created successfully!'), "success")
                     return redirect(url_for('budget.main', tab='dashboard'))
                 except Exception as e:

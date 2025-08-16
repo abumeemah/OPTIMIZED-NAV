@@ -14,8 +14,7 @@ from wtforms import DateField, SubmitField
 from wtforms.validators import Optional
 import logging
 from helpers.branding_helpers import draw_ficore_pdf_header
-
-logger = logging.getLogger(__name__)
+from utils import logger
 
 reports_bp = Blueprint('reports', __name__, url_prefix='/reports')
 

@@ -13,8 +13,7 @@ from io import BytesIO
 from PIL import Image
 import logging
 import utils
-
-logger = logging.getLogger(__name__)
+from utils import logger
 
 settings_bp = Blueprint('settings', __name__, url_prefix='/settings')
 

@@ -17,7 +17,7 @@ from reportlab.lib.units import inch
 from io import BytesIO
 from contextlib import nullcontext
 import uuid
-from models import log_tool_usage, get_shopping_lists
+from models import log_tool_usage, get_shopping_lists, create_shopping_list, create_shopping_item, create_shopping_items_bulk
 import json
 
 shopping_bp = Blueprint(
@@ -467,10 +467,10 @@ def main():
                 try:
                     with db.client.start_session() as mongo_session:
                         with mongo_session.start_transaction():
-                            logger.debug(f"Inserting list_data: {list_data}", extra={'session_id': session_id})
-                            db.shopping_lists.insert_one(list_data, session=mongo_session)
+                            logger.debug(f"Creating shopping list: {list_data}", extra={'session_id': session_id})
+                            created_list_id = create_shopping_list(db, list_data)
                             if current_user.is_authenticated and not is_admin():
-                                if not deduct_ficore_credits(db, current_user.id, 1, 'create_shopping_list', str(list_data['_id']), mongo_session):
+                                if not deduct_ficore_credits(db, current_user.id, 1, 'create_shopping_list', created_list_id, mongo_session):
                                     flash(trans('shopping_credit_deduction_failed', default='Failed to deduct credits for list creation.'), 'danger')
                                     return redirect(url_for('shopping.main', tab='create-list'))
                     session['selected_list_id'] = str(list_data['_id'])
@@ -595,8 +595,8 @@ def main():
                                     'created_at': datetime.utcnow(),
                                     'updated_at': datetime.utcnow()
                                 }
-                                logger.debug(f"Inserting item_data: {new_item_data}", extra={'session_id': session_id})
-                                db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                                logger.debug(f"Creating shopping item: {new_item_data}", extra={'session_id': session_id})
+                                created_item_id = create_shopping_item(db, new_item_data)
                                 added += 1
                                 existing_names.add(item_data['name'].lower())
                             except ValueError as e:
@@ -693,8 +693,8 @@ def main():
                                     'created_at': datetime.utcnow(),
                                     'updated_at': datetime.utcnow()
                                 }
-                                logger.debug(f"Inserting item_data: {new_item_data}", extra={'session_id': session_id})
-                                db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                                logger.debug(f"Creating shopping item: {new_item_data}", extra={'session_id': session_id})
+                                created_item_id = create_shopping_item(db, new_item_data)
                                 added += 1
                                 existing_names.add(item_data['name'].lower())
                             except ValueError as e:
@@ -1026,8 +1026,8 @@ def manage_list(list_id):
                                         'created_at': datetime.utcnow(),
                                         'updated_at': datetime.utcnow()
                                     }
-                                    logger.debug(f"Inserting item_data: {new_item_data}", extra={'session_id': session_id})
-                                    db.shopping_items.insert_one(new_item_data, session=mongo_session)
+                                    logger.debug(f"Creating shopping item: {new_item_data}", extra={'session_id': session_id})
+                                    created_item_id = create_shopping_item(db, new_item_data)
                                     added += 1
                                     existing_names.add(item_data['name'].lower())
                                 except ValueError as e:

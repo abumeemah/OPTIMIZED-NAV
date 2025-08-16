@@ -13,10 +13,9 @@ import re
 import random
 from itsdangerous import URLSafeTimedSerializer
 import utils
+from utils import logger
 from translations import trans
 from models import create_user
-
-logger = logging.getLogger(__name__)
 
 users_bp = Blueprint('users', __name__, template_folder='templates/users')
 

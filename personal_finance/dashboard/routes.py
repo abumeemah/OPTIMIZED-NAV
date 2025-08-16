@@ -5,8 +5,7 @@ import utils
 from bson import ObjectId
 from datetime import datetime
 import logging
-
-logger = logging.getLogger(__name__)
+from utils import logger
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/dashboard')
 

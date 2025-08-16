@@ -2,10 +2,9 @@ import uuid
 from datetime import datetime
 from flask import session, has_request_context
 import logging
+from utils import logger
 
-logger = logging.getLogger(__name__)
-
-# Anonymous session functionality removed - all users must be authenticated
+# All users must be authenticated - no anonymous sessions
 
 def get_session_id():
     """Get the current session ID for authenticated users only."""
@@ -18,9 +17,9 @@ def get_session_id():
         logger.error(f"Error getting session ID: {str(e)}")
         return 'session-error'
 
-# Anonymous session functionality removed - all sessions are authenticated
+# All sessions are authenticated
 
-# Anonymous session functionality removed
+# All users must be authenticated
 
 def update_session_language(language):
     """Update the session language."""

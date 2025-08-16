@@ -10,6 +10,7 @@ from translations import trans
 from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from utils import get_all_recent_activities, requires_role, is_admin, get_mongo_db, limiter, log_tool_usage, check_ficore_credit_balance
+from models import create_bill
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -506,14 +507,14 @@ def main():
                             'reminder_days': cleaned_data['reminder_days'],
                             'created_at': datetime.utcnow()
                         }
-                        bills_collection.insert_one(bill_data)
+                        created_bill_id = create_bill(db, bill_data)
                         if current_user.is_authenticated and not is_admin():
                             if not deduct_ficore_credits(db, current_user.id, 1, 'add_bill', bill_id):
                                 bills_collection.delete_one({'_id': bill_id})
                                 current_app.logger.error(f"Failed to deduct Ficore Credit for adding bill {bill_id} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                                 flash(trans('bill_credit_deduction_failed', default='Failed to deduct Ficore Credit for adding bill.'), 'danger')
                                 return redirect(url_for('bill.main', tab='add-bill'))
-                        current_app.logger.info(f"Bill {bill_id} added successfully for user {bill_data['user_email']}", extra={'session_id': session.get('sid', 'unknown')})
+                        current_app.logger.info(f"Bill {created_bill_id} added successfully for user {bill_data['user_email']}", extra={'session_id': session.get('sid', 'unknown')})
                         flash(trans('bill_added_success', default='Bill added successfully!'), 'success')
                         if cleaned_data['send_email'] and bill_data['user_email']:
                             try:
@@ -670,14 +671,14 @@ def main():
                                 new_bill['due_date'] = new_due_date.isoformat()
                                 new_bill['status'] = 'unpaid'
                                 new_bill['created_at'] = datetime.utcnow()
-                                bills_collection.insert_one(new_bill)
+                                created_recurring_bill_id = create_bill(db, new_bill)
                                 if current_user.is_authenticated and not is_admin():
                                     if not deduct_ficore_credits(db, current_user.id, 1, 'add_recurring_bill', new_bill['_id']):
                                         bills_collection.delete_one({'_id': new_bill['_id']})
                                         current_app.logger.error(f"Failed to deduct Ficore Credit for adding recurring bill {new_bill['_id']} by user {current_user.id}", extra={'session_id': session.get('sid', 'unknown')})
                                         flash(trans('bill_credit_deduction_failed', default='Failed to deduct Ficore Credit for adding recurring bill.'), 'danger')
                                         return redirect(url_for('bill.main', tab='manage-bills'))
-                                current_app.logger.info(f"Recurring bill {new_bill['_id']} created for {bill['bill_name']}", extra={'session_id': session.get('sid', 'unknown')})
+                                current_app.logger.info(f"Recurring bill {created_recurring_bill_id} created for {bill['bill_name']}", extra={'session_id': session.get('sid', 'unknown')})
                                 flash(trans('bill_new_recurring_bill_success', default='New recurring bill created for {bill_name}.').format(bill_name=bill['bill_name']), 'success')
                             except Exception as e:
                                 current_app.logger.error(f"Error creating recurring bill: {str(e)}", extra={'session_id': session.get('sid', 'unknown')})

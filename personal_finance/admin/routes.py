@@ -10,8 +10,7 @@ import utils
 import datetime
 from models import get_budgets, get_bills
 from credits import ApproveCreditRequestForm, fix_ficore_credit_balances
-
-logger = logging.getLogger(__name__)
+from utils import logger
 
 admin_bp = Blueprint('admin', __name__, template_folder='templates/admin')
 
