@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from functools import wraps
 from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo.errors import OperationFailure
 import certifi
 from flask_login import LoginManager, login_required, current_user, UserMixin, logout_user
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -145,7 +146,23 @@ def create_app():
 
     # Setup session
     logger.info('Creating TTL index for sessions collection')
-    app.extensions['mongo']['ficodb'].sessions.create_index("created_at", expireAfterSeconds=1800)
+    sessions_coll = app.extensions['mongo']['ficodb'].sessions
+    desired_ttl = 1800  # 30 minutes
+
+    # Check existing indexes
+    existing_indexes = sessions_coll.list_indexes()
+    for idx in existing_indexes:
+        if idx.get('name') == 'created_at_1':
+            if idx.get('expireAfterSeconds') != desired_ttl:
+                sessions_coll.drop_index('created_at_1')
+            break
+
+    # Create the index (will succeed if dropped or matching)
+    try:
+        sessions_coll.create_index("created_at", expireAfterSeconds=desired_ttl)
+    except OperationFailure as e:
+        if 'IndexOptionsConflict' not in str(e):
+            raise  # Re-raise if not the expected conflict
 
     # Register blueprints
     app.register_blueprint(users_bp, url_prefix='/users')
@@ -179,7 +196,7 @@ def create_app():
                 db[collection].create_index(index)
         
         # Setup admin user
-        admin_email = os.getenv('ADMIN_EMAIL', 'ficoreafrica@gmail.com')
+        admin_email = os.getenv('ADMIN_EMAIL', 'ficoreaiafrica@gmail.com')
         admin_password = os.getenv('ADMIN_PASSWORD')
         admin_username = os.getenv('ADMIN_USERNAME', 'admin')
         
