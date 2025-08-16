@@ -135,7 +135,6 @@ def create_app():
                 return redirect(url_for('users.login'))
             if 'sid' not in session:
                 session['sid'] = str(uuid.uuid4())
-                session['is_anonymous'] = False
                 logger.info(f'New session for user {current_user.id}: {session["sid"]}')
             return f(*args, **kwargs)
         return decorated_function

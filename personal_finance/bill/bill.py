@@ -18,11 +18,11 @@ bill_bp = Blueprint('bill', __name__, template_folder='templates/', url_prefix='
 csrf = CSRFProtect()
 
 def custom_login_required(f):
-    """Custom login decorator that allows both authenticated users and anonymous sessions."""
+    """Custom login decorator that requires authentication."""
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_user.is_authenticated or session.get('is_anonymous', False):
+        if current_user.is_authenticated:
             return f(*args, **kwargs)
         return redirect(url_for('users.login', next=request.url))
     return decorated_function
@@ -413,9 +413,8 @@ class EditBillForm(FlaskForm):
 def main():
     """Main bill management interface with tabbed layout."""
     if 'sid' not in session:
-        create_anonymous_session()
-        session['is_anonymous'] = True
-        current_app.logger.debug(f"New anonymous session created with sid: {session['sid']}", extra={'session_id': session.get('sid', 'unknown')})
+        session['sid'] = str(uuid.uuid4())
+        current_app.logger.debug(f"New session created with sid: {session['sid']}", extra={'session_id': session.get('sid', 'unknown')})
     session.permanent = True
     session.modified = True
     form = BillForm()
@@ -863,9 +862,8 @@ def unsubscribe():
     """Unsubscribe user from bill email notifications."""
     db = get_mongo_db()
     if 'sid' not in session:
-        create_anonymous_session()
-        session['is_anonymous'] = True
-        current_app.logger.debug(f"New anonymous session created with sid: {session['sid']}", extra={'session_id': session.get('sid', 'unknown')})
+        session['sid'] = str(uuid.uuid4())
+        current_app.logger.debug(f"New session created with sid: {session['sid']}", extra={'session_id': session.get('sid', 'unknown')})
     session.permanent = True
     session.modified = True
     try:
@@ -882,10 +880,10 @@ def unsubscribe():
         bills_collection = db.bills
         result = bills_collection.update_many(filter_kwargs, {'$set': {'send_email': False}})
         if result.modified_count > 0:
-            current_app.logger.info(f"Successfully unsubscribed email {current_user.email if current_user.is_authenticated else 'anonymous'}", extra={'session_id': session.get('sid', 'unknown')})
+            current_app.logger.info(f"Successfully unsubscribed email {current_user.email}", extra={'session_id': session.get('sid', 'unknown')})
             flash(trans('bill_unsubscribe_success', default='Successfully unsubscribed from bill emails.'), 'success')
         else:
-            current_app.logger.warning(f"No records updated for email {current_user.email if current_user.is_authenticated else 'anonymous'} during unsubscribe", extra={'session_id': session.get('sid', 'unknown')})
+            current_app.logger.warning(f"No records updated for email {current_user.email} during unsubscribe", extra={'session_id': session.get('sid', 'unknown')})
             flash(trans('bill_unsubscribe_failed', default='No matching email found or already unsubscribed.'), 'danger')
         return redirect(url_for('bill.main', tab='manage-bills'))
     except Exception as e:
@@ -899,3 +897,4 @@ def handle_csrf_error(e):
     current_app.logger.error(f"CSRF error on {request.path}: {e.description}", extra={'session_id': session.get('sid', 'unknown')})
     flash(trans('bill_csrf_error', default='Form submission failed due to a missing security token. Please refresh and try again.'), 'danger')
     return redirect(url_for('bill.main', tab='add-bill')), 403
+

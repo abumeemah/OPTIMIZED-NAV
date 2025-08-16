@@ -447,7 +447,7 @@ def log_tool_usage(action, tool_name=None, details=None, user_id=None, db=None, 
         )
         raise RuntimeError(f"Failed to log tool usage: {str(e)}")
 
-# Anonymous session functionality removed - all users must be authenticated
+# All users must be authenticated - no anonymous sessions
 
 
 def clean_currency(value, max_value=10000000000):
@@ -1024,17 +1024,23 @@ def check_ficore_credit_balance(required_amount=1, user_id=None):
         if user_id is None and current_user.is_authenticated:
             user_id = current_user.id
         if not user_id:
+            logger.warning("No user_id provided for credit balance check")
             return False
         
         db = get_mongo_db()
         user = db.users.find_one({'_id': user_id})
         if not user:
+            logger.error(f"User {user_id} not found for credit balance check")
             return False
         
-        current_balance = int(user.get('ficore_credit_balance', 0))
-        return current_balance >= required_amount
+        # Use float to match the MongoDB schema and deduct_ficore_credits function
+        current_balance = float(user.get('ficore_credit_balance', 0))
+        has_sufficient = current_balance >= required_amount
+        
+        logger.debug(f"Credit balance check for user {user_id}: required={required_amount}, available={current_balance}, sufficient={has_sufficient}")
+        return has_sufficient
     except Exception as e:
-        logger.error(f"Error checking Ficore Credit balance: {str(e)}")
+        logger.error(f"Error checking Ficore Credit balance for user {user_id}: {str(e)}", exc_info=True)
         return False
 
 def send_sms_reminder(phone, message):
@@ -1070,7 +1076,7 @@ def send_whatsapp_reminder(phone, message):
 # Export all functions and variables
 __all__ = [
     'login_manager', 'clean_currency', 'log_tool_usage', 'flask_session', 'csrf', 'limiter',
-    'get_limiter', 'create_anonymous_session', 'trans_function', 'is_valid_email',
+    'get_limiter', 'trans_function', 'is_valid_email',
     'get_mongo_db', 'close_mongo_db', 'get_mail', 'requires_role',
     'get_user_query', 'is_admin', 'format_currency', 'format_date', 'sanitize_input',
     'generate_unique_id', 'validate_required_fields', 'get_user_language',

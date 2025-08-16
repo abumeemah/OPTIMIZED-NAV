@@ -20,7 +20,7 @@ def landing():
             current_app.logger.info(f"Authenticated user {current_user.id} redirected from landing to {get_post_login_redirect(current_user.role)}")
             return redirect(get_post_login_redirect(current_user.role))
 
-        current_app.logger.info(f"Accessing general.landing - User: Anonymous, Session: {dict(session)}")
+        current_app.logger.info(f"Accessing general.landing - User: Unauthenticated, Session: {dict(session)}")
         explore_features = utils.get_explore_features()
         response = make_response(render_template(
             'general/landingpage.html',

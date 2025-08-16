@@ -184,6 +184,29 @@ def initialize_app_data(app):
                     'indexes': [
                         {'key': [('user_id', ASCENDING), ('sent_at', DESCENDING)]}
                     ]
+                },
+                'ficore_credit_transactions': {
+                    'validator': {
+                        '$jsonSchema': {
+                            'bsonType': 'object',
+                            'required': ['user_id', 'action', 'amount', 'timestamp', 'session_id', 'status'],
+                            'properties': {
+                                'user_id': {'bsonType': 'string'},
+                                'action': {'bsonType': 'string'},
+                                'amount': {'bsonType': 'double'},
+                                'item_id': {'bsonType': ['string', 'null']},
+                                'budget_id': {'bsonType': ['string', 'null']},
+                                'timestamp': {'bsonType': 'date'},
+                                'session_id': {'bsonType': 'string'},
+                                'status': {'enum': ['completed', 'failed', 'pending']}
+                            }
+                        }
+                    },
+                    'indexes': [
+                        {'key': [('user_id', ASCENDING), ('timestamp', DESCENDING)]},
+                        {'key': [('status', ASCENDING)]},
+                        {'key': [('action', ASCENDING)]}
+                    ]
                 }
             }
                 

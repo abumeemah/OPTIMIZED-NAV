@@ -262,8 +262,7 @@ def login():
                         user_obj = User(user['_id'], user['email'], user.get('display_name'), user.get('role', 'personal'))
                         login_user(user_obj, remember=form.remember.data)
                         session['lang'] = user.get('language', 'en')
-                        session.pop('is_anonymous', None)
-                        session['is_anonymous'] = False
+
                         log_audit_action('login_without_2fa', {'user_id': username, 'reason': 'email_failure_test_mode'})
                         logger.info(f"User {username} logged in without 2FA due to email failure (test mode). Session: {dict(session)}")
                         if not user.get('setup_complete', False):
@@ -281,8 +280,7 @@ def login():
                     return render_template('users/login.html', form=form, title=trans('general_login', lang=session.get('lang', 'en'))), 401
                 
                 session['lang'] = user.get('language', 'en')
-                session.pop('is_anonymous', None)
-                session['is_anonymous'] = False
+                
                 log_audit_action('login', {'user_id': username})
                 logger.info(f"User {username} logged in successfully. Session: {dict(session)}")
                 if not user.get('setup_complete', False):
@@ -343,8 +341,7 @@ def verify_2fa():
                 from app import User
                 user_obj = User(user['_id'], user['email'], user.get('display_name'), user.get('role', 'personal'))
                 login_user(user_obj, remember=True)
-                session.pop('is_anonymous', None)
-                session['is_anonymous'] = False
+                
                 session['lang'] = user.get('language', 'en')
                 db.users.update_one(
                     {'_id': username},
@@ -462,8 +459,7 @@ def signup():
             user_obj = User(username, email, username, 'personal')
             login_user(user_obj, remember=True)
             session['lang'] = 'en'
-            session.pop('is_anonymous', None)
-            session['is_anonymous'] = False
+            
             logger.info(f"User {username} logged in after signup. Session: {dict(session)}")
             setup_route = get_setup_wizard_route('personal')
             return redirect(url_for(setup_route))
@@ -756,3 +752,4 @@ def logout():
         response.set_cookie(current_app.config['SESSION_COOKIE_NAME'], '', expires=0, httponly=True, secure=current_app.config.get('SESSION_COOKIE_SECURE', True))
         response.set_cookie('remember_token', '', expires=0, httponly=True, secure=True)
         return response
+

@@ -47,99 +47,180 @@ def auto_categorize_item(item_name):
     return 'other'
 
 def deduct_ficore_credits(db, user_id, amount, action, item_id=None, mongo_session=None):
+    """
+    Deduct Ficore Credits from user balance with enhanced error logging and transaction handling.
+    
+    Args:
+        db: MongoDB database instance
+        user_id: User ID (must match _id field in users collection)
+        amount: Amount to deduct (1 or 2)
+        action: Action description for logging
+        item_id: Optional item ID for reference
+        mongo_session: Optional MongoDB session for transaction
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    session_id = session.get('sid', 'no-session-id')
+    
     try:
-        amount = int(amount)  # Ensure amount is an integer (1 or 2)
+        # Validate input parameters
+        amount = int(amount)
         if amount not in [1, 2]:
-            logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}",
-                        extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+            logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}. Must be 1 or 2.",
+                        extra={'session_id': session_id, 'user_id': user_id})
             return False
+        
+        if not user_id:
+            logger.error(f"No user_id provided for credit deduction, action: {action}",
+                        extra={'session_id': session_id})
+            return False
+        
+        # Check if user exists and get current balance
         user = db.users.find_one({'_id': user_id}, session=mongo_session)
         if not user:
-            logger.error(f"User {user_id} not found for credit deduction, action: {action}",
-                        extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+            logger.error(f"User {user_id} not found in database for credit deduction, action: {action}. Check if user_id matches _id field type.",
+                        extra={'session_id': session_id, 'user_id': user_id})
             return False
-        current_balance = user.get('ficore_credit_balance', 0)
+        
+        current_balance = float(user.get('ficore_credit_balance', 0))
+        logger.debug(f"Current balance for user {user_id}: {current_balance}, attempting to deduct: {amount}",
+                    extra={'session_id': session_id, 'user_id': user_id})
+        
         if current_balance < amount:
             logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}, action: {action}",
-                         extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                         extra={'session_id': session_id, 'user_id': user_id})
             return False
+        
+        # Transaction handling with retry logic
         session_to_use = mongo_session if mongo_session else db.client.start_session()
         owns_session = not mongo_session
         max_retries = 3
+        
         for attempt in range(max_retries):
             try:
                 with session_to_use.start_transaction() if not mongo_session else nullcontext():
+                    # Update user balance using aggregation pipeline to ensure type consistency
                     result = db.users.update_one(
                         {'_id': user_id},
                         [{'$set': {'ficore_credit_balance': {'$toDouble': {'$subtract': ['$ficore_credit_balance', amount]}}}}],
                         session=session_to_use
                     )
+                    
                     if result.modified_count == 0:
-                        logger.error(f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified",
-                                    extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                        error_msg = f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified. User may not exist or balance unchanged."
+                        logger.error(error_msg, extra={'session_id': session_id, 'user_id': user_id})
+                        
+                        # Log failed transaction
                         db.ficore_credit_transactions.insert_one({
                             '_id': ObjectId(),
                             'user_id': user_id,
                             'action': action,
-                            'amount': -amount,
+                            'amount': float(-amount),
                             'item_id': str(item_id) if item_id else None,
                             'timestamp': datetime.utcnow(),
-                            'session_id': session.get('sid', 'no-session-id'),
+                            'session_id': session_id,
                             'status': 'failed'
                         }, session=session_to_use)
-                        raise ValueError(f"Failed to update user balance for {user_id}")
+                        
+                        raise ValueError(error_msg)
+                    
+                    # Log successful transaction
                     transaction = {
                         '_id': ObjectId(),
                         'user_id': user_id,
                         'action': action,
-                        'amount': -amount,
+                        'amount': float(-amount),
                         'item_id': str(item_id) if item_id else None,
                         'timestamp': datetime.utcnow(),
-                        'session_id': session.get('sid', 'no-session-id'),
+                        'session_id': session_id,
                         'status': 'completed'
                     }
                     db.ficore_credit_transactions.insert_one(transaction, session=session_to_use)
+                    
+                    # Log audit trail
                     db.audit_logs.insert_one({
                         'admin_id': 'system',
                         'action': f'deduct_ficore_credits_{action}',
-                        'details': {'user_id': user_id, 'amount': amount, 'item_id': str(item_id) if item_id else None},
+                        'details': {
+                            'user_id': user_id, 
+                            'amount': amount, 
+                            'item_id': str(item_id) if item_id else None,
+                            'previous_balance': current_balance,
+                            'new_balance': current_balance - amount
+                        },
                         'timestamp': datetime.utcnow()
                     }, session=session_to_use)
+                    
                     if owns_session:
                         session_to_use.commit_transaction()
-                    logger.info(f"Deducted {amount} Ficore Credits for {action} by user {user_id}",
-                               extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                    
+                    logger.info(f"Successfully deducted {amount} Ficore Credits for {action} by user {user_id}. New balance: {current_balance - amount}",
+                               extra={'session_id': session_id, 'user_id': user_id})
                     return True
+                    
             except errors.OperationFailure as e:
-                if "TransientTransactionError" in e.details.get("errorLabels", []):
+                error_details = e.details if hasattr(e, 'details') else {}
+                
+                if "TransientTransactionError" in error_details.get("errorLabels", []):
                     if attempt < max_retries - 1:
-                        logger.warning(f"Retrying transaction for user {user_id}, action: {action}, attempt {attempt + 1}",
-                                     extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                        logger.warning(f"Transient transaction error for user {user_id}, action: {action}, attempt {attempt + 1}/{max_retries}. Retrying...",
+                                     extra={'session_id': session_id, 'user_id': user_id})
                         continue
-                logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
-                            exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                
+                logger.error(f"MongoDB operation failed for user {user_id}, action: {action}: {str(e)}. Error details: {error_details}",
+                            exc_info=True, extra={'session_id': session_id, 'user_id': user_id})
+                
                 if owns_session:
-                    session_to_use.abort_transaction()
+                    try:
+                        session_to_use.abort_transaction()
+                    except Exception as abort_error:
+                        logger.error(f"Failed to abort transaction: {abort_error}", extra={'session_id': session_id, 'user_id': user_id})
                 return False
+                
             except (ValueError, errors.PyMongoError) as e:
-                logger.error(f"Transaction aborted for user {user_id}, action: {action}: {str(e)}",
-                            exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+                logger.error(f"Database error during credit deduction for user {user_id}, action: {action}: {str(e)}",
+                            exc_info=True, extra={'session_id': session_id, 'user_id': user_id})
+                
                 if owns_session:
-                    session_to_use.abort_transaction()
+                    try:
+                        session_to_use.abort_transaction()
+                    except Exception as abort_error:
+                        logger.error(f"Failed to abort transaction: {abort_error}", extra={'session_id': session_id, 'user_id': user_id})
                 return False
+                
+            except Exception as e:
+                logger.error(f"Unexpected error during transaction for user {user_id}, action: {action}: {str(e)}",
+                            exc_info=True, extra={'session_id': session_id, 'user_id': user_id})
+                
+                if owns_session:
+                    try:
+                        session_to_use.abort_transaction()
+                    except Exception as abort_error:
+                        logger.error(f"Failed to abort transaction: {abort_error}", extra={'session_id': session_id, 'user_id': user_id})
+                return False
+                
             finally:
                 if owns_session:
-                    session_to_use.end_session()
+                    try:
+                        session_to_use.end_session()
+                    except Exception as end_error:
+                        logger.error(f"Failed to end session: {end_error}", extra={'session_id': session_id, 'user_id': user_id})
+        
+        logger.error(f"All {max_retries} transaction attempts failed for user {user_id}, action: {action}",
+                    extra={'session_id': session_id, 'user_id': user_id})
+        return False
+        
     except Exception as e:
-        logger.error(f"Unexpected error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}",
-                    exc_info=True, extra={'session_id': session.get('sid', 'no-session-id'), 'user_id': user_id})
+        logger.error(f"Unexpected error in deduct_ficore_credits for user {user_id}, action: {action}: {str(e)}",
+                    exc_info=True, extra={'session_id': session_id, 'user_id': user_id})
         return False
 
 def custom_login_required(f):
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if current_user.is_authenticated or session.get('is_anonymous', False):
+        if current_user.is_authenticated:
             return f(*args, **kwargs)
         return redirect(url_for('users.login', next=request.url))
     return decorated_function
@@ -278,10 +359,8 @@ class ShareListForm(FlaskForm):
 @custom_login_required
 @requires_role(['personal', 'admin'])
 def main():
-    # Ensure session persistence for anonymous users
     if 'sid' not in session:
-        create_anonymous_session()
-        session['is_anonymous'] = True
+        session['sid'] = str(uuid.uuid4())
         logger.debug(f"New session created with sid: {session['sid']}")
     session.permanent = True
     session.modified = True
@@ -303,7 +382,7 @@ def main():
     if active_tab not in valid_tabs:
         active_tab = 'create-list'
 
-    filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
+    filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)}
     lists = {str(lst['_id']): lst for lst in db.shopping_lists.find(filter_criteria).sort('created_at', -1)}
     
     # Preselect most recent list if none selected
@@ -347,7 +426,7 @@ def main():
         log_tool_usage(
             tool_name='shopping',
             db=db,
-            user_id=current_user.id if current_user.is_authenticated else None,
+            user_id=current_user.id,
             session_id=session.get('sid', 'no-session'),
             action='main_view'
         )
@@ -376,8 +455,7 @@ def main():
                 list_data = {
                     '_id': ObjectId(),
                     'name': list_form.name.data.strip(),
-                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                    'session_id': session_id if not current_user.is_authenticated else None,
+                    'user_id': str(current_user.id),
                     'budget': float(list_form.budget.data),
                     'created_at': datetime.utcnow(),
                     'updated_at': datetime.utcnow(),
@@ -505,8 +583,7 @@ def main():
                                 new_item_data = {
                                     '_id': ObjectId(),
                                     'list_id': list_id,
-                                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                                    'session_id': session_id,
+                                    'user_id': str(current_user.id),
                                     'name': item_data['name'],
                                     'quantity': new_quantity,
                                     'price': new_price,
@@ -555,7 +632,7 @@ def main():
             if not ObjectId.is_valid(list_id):
                 flash(trans('shopping_invalid_list_id', default='Invalid list ID.'), 'danger')
                 return redirect(url_for('shopping.main', tab='dashboard'))
-            filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
+            filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)}
             shopping_list = db.shopping_lists.find_one({'_id': ObjectId(list_id), **filter_criteria})
             if not shopping_list:
                 flash(trans('shopping_list_not_found', default='List not found.'), 'danger')
@@ -604,8 +681,7 @@ def main():
                                 new_item_data = {
                                     '_id': ObjectId(),
                                     'list_id': list_id,
-                                    'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                                    'session_id': session_id,
+                                    'user_id': str(current_user.id),
                                     'name': item_data['name'],
                                     'quantity': new_quantity,
                                     'price': new_price,
@@ -790,7 +866,7 @@ def get_list_details():
     if not ObjectId.is_valid(list_id):
         return jsonify({'success': False, 'error': trans('shopping_invalid_list_id', default='Invalid list ID.')}), 400
     
-    filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)} if current_user.is_authenticated else {'session_id': session['sid']}
+    filter_criteria = {} if is_admin() else {'user_id': str(current_user.id)}
     shopping_list = db.shopping_lists.find_one({'_id': ObjectId(list_id), **filter_criteria})
     
     if not shopping_list:
@@ -938,8 +1014,7 @@ def manage_list(list_id):
                                     new_item_data = {
                                         '_id': ObjectId(),
                                         'list_id': list_id,
-                                        'user_id': str(current_user.id) if current_user.is_authenticated else None,
-                                        'session_id': session_id,
+                                        'user_id': str(current_user.id),
                                         'name': item_data['name'],
                                         'quantity': new_quantity,
                                         'price': new_price,
@@ -1263,3 +1338,4 @@ def init_app(app):
         db.shopping_lists.create_index([('user_id', 1), ('status', 1), ('updated_at', 1)])
     except Exception as e:
         logger.error(f"Error initializing shopping app: {str(e)}", exc_info=True)
+

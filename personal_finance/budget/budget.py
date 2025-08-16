@@ -53,33 +53,113 @@ def custom_login_required(f):
     return decorated_function
 
 def deduct_ficore_credits(db, user_id, amount, action, budget_id=None):
-    """Deduct Ficore Credits from user balance and log the transaction."""
+    """
+    Deduct Ficore Credits from user balance with enhanced error logging and transaction handling.
+    
+    Args:
+        db: MongoDB database instance
+        user_id: User ID (must match _id field in users collection)
+        amount: Amount to deduct
+        action: Action description for logging
+        budget_id: Optional budget ID for reference
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    session_id = session.get('sid', 'unknown')
+    
     try:
+        # Validate input parameters
+        if not user_id:
+            logger.error(f"No user_id provided for credit deduction, action: {action}",
+                        extra={'session_id': session_id})
+            return False
+        
+        if amount <= 0:
+            logger.error(f"Invalid deduction amount {amount} for user {user_id}, action: {action}. Must be positive.",
+                        extra={'session_id': session_id, 'user_id': user_id})
+            return False
+        
+        # Check if user exists and get current balance
         user = db.users.find_one({'_id': user_id})
         if not user:
+            logger.error(f"User {user_id} not found in database for credit deduction, action: {action}. Check if user_id matches _id field type.",
+                        extra={'session_id': session_id, 'user_id': user_id})
             return False
-        current_balance = user.get('ficore_credit_balance', 0)
+        
+        current_balance = float(user.get('ficore_credit_balance', 0))
+        logger.debug(f"Current balance for user {user_id}: {current_balance}, attempting to deduct: {amount}",
+                    extra={'session_id': session_id, 'user_id': user_id})
+        
         if current_balance < amount:
+            logger.warning(f"Insufficient credits for user {user_id}: required {amount}, available {current_balance}, action: {action}",
+                         extra={'session_id': session_id, 'user_id': user_id})
             return False
-        result = db.users.update_one(
-            {'_id': user_id},
-            {'$inc': {'ficore_credit_balance': -amount}}
-        )
-        if result.modified_count == 0:
-            return False
-        transaction = {
-            '_id': ObjectId(),
-            'user_id': user_id,
-            'action': action,
-            'amount': -amount,
-            'budget_id': str(budget_id) if budget_id else None,
-            'timestamp': datetime.utcnow(),
-            'session_id': session.get('sid', 'unknown'),
-            'status': 'completed'
-        }
-        db.ficore_credit_transactions.insert_one(transaction)
+        
+        # Use transaction for atomic operation
+        with db.client.start_session() as mongo_session:
+            with mongo_session.start_transaction():
+                # Update user balance using $inc to maintain atomicity
+                result = db.users.update_one(
+                    {'_id': user_id},
+                    {'$inc': {'ficore_credit_balance': -amount}},
+                    session=mongo_session
+                )
+                
+                if result.modified_count == 0:
+                    error_msg = f"Failed to deduct {amount} credits for user {user_id}, action: {action}: No documents modified. User may not exist or balance unchanged."
+                    logger.error(error_msg, extra={'session_id': session_id, 'user_id': user_id})
+                    
+                    # Log failed transaction
+                    db.ficore_credit_transactions.insert_one({
+                        '_id': ObjectId(),
+                        'user_id': user_id,
+                        'action': action,
+                        'amount': float(-amount),
+                        'budget_id': str(budget_id) if budget_id else None,
+                        'timestamp': datetime.utcnow(),
+                        'session_id': session_id,
+                        'status': 'failed'
+                    }, session=mongo_session)
+                    
+                    raise ValueError(error_msg)
+                
+                # Log successful transaction
+                transaction = {
+                    '_id': ObjectId(),
+                    'user_id': user_id,
+                    'action': action,
+                    'amount': float(-amount),
+                    'budget_id': str(budget_id) if budget_id else None,
+                    'timestamp': datetime.utcnow(),
+                    'session_id': session_id,
+                    'status': 'completed'
+                }
+                db.ficore_credit_transactions.insert_one(transaction, session=mongo_session)
+                
+                # Log audit trail
+                db.audit_logs.insert_one({
+                    'admin_id': 'system',
+                    'action': f'deduct_ficore_credits_{action}',
+                    'details': {
+                        'user_id': user_id, 
+                        'amount': amount, 
+                        'budget_id': str(budget_id) if budget_id else None,
+                        'previous_balance': current_balance,
+                        'new_balance': current_balance - amount
+                    },
+                    'timestamp': datetime.utcnow()
+                }, session=mongo_session)
+                
+                mongo_session.commit_transaction()
+                
+        logger.info(f"Successfully deducted {amount} Ficore Credits for {action} by user {user_id}. New balance: {current_balance - amount}",
+                   extra={'session_id': session_id, 'user_id': user_id})
         return True
-    except Exception:
+        
+    except Exception as e:
+        logger.error(f"Error deducting {amount} Ficore Credits for {action} by user {user_id}: {str(e)}",
+                    exc_info=True, extra={'session_id': session_id, 'user_id': user_id})
         return False
 
 class CommaSeparatedIntegerField(IntegerField):
