@@ -276,8 +276,8 @@
                                                         </tr>
                                                     </thead>
                                                     <tbody id="items-table-body">
-                                                        {% if selected_list.items %}
-                                                            {% for item in selected_list.items %}
+                                                        {% if items %}
+                                                            {% for item in items %}
                                                                 <tr>
                                                                     <td>{{ item.name | e }}</td>
                                                                     <td>{{ item.quantity | e }}</td>
